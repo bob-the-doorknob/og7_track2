@@ -3,6 +3,7 @@
 .vscode/
 .idea/
 *.swp
+.worktrees/
 
 # --- Python ---
 __pycache__/
