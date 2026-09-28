@@ -3,6 +3,7 @@
 
 import math
 import time
+import zipfile
 from pathlib import Path
 
 import numpy as np
@@ -18,6 +19,7 @@ from std_msgs.msg import Float32
 from visualization_msgs.msg import Marker, MarkerArray
 
 from team_driver.pure_pursuit import PurePursuit
+from team_driver.residual_policy import ResidualPolicy, pack_observation
 from team_driver.safety import LidarSafety
 from team_driver.speed_controller import SpeedController
 
@@ -60,6 +62,7 @@ class Driver(Node):
         self.declare_parameter('speed_kp', 0.24)
         self.declare_parameter('speed_ki', 0.08)
         self.declare_parameter('baseline_only', True)
+        self.declare_parameter('policy_path', '')
         self.declare_parameter('safety_enabled', True)
         self.declare_parameter('safety_side_margin', 0.08)
         self.declare_parameter('safety_stop_margin', 0.25)
@@ -134,13 +137,25 @@ class Driver(Node):
         self.last_odom_time = None
         self.last_control_time = None
         self.last_safety_warning = 0.0
+        self.last_policy_warning = 0.0
+        self.policy = None
 
         self._marker_divisor = 0
-        if not self.baseline_only:
-            self.get_logger().warn(
-                'baseline_only is false, but no residual policy is installed yet; '
-                'running the classical baseline.'
-            )
+        if self.baseline_only:
+            self.get_logger().info('Residual policy disabled; running the classical baseline.')
+        else:
+            configured_policy_path = str(self.get_parameter('policy_path').value).strip()
+            policy_path = (Path(configured_policy_path) if configured_policy_path else
+                           Path(get_package_share_directory('team_driver')) /
+                           'weights' / 'residual_policy.npz')
+            try:
+                self.policy = ResidualPolicy.load(policy_path)
+                self.get_logger().info(f'Loaded residual policy from {policy_path}')
+            except (OSError, KeyError, ValueError, zipfile.BadZipFile) as exc:
+                self.get_logger().warn(
+                    f'Residual policy unavailable ({policy_path}: {exc}); '
+                    'running the classical baseline.'
+                )
 
     # ------------------------------------------------------------------
     # Where the car is. Free, accurate, and worth building on.
@@ -212,12 +227,37 @@ class Driver(Node):
             self.max_lateral_accel / max(abs(curvature), 1e-4)
         )
         target_speed = min(self.target_speed, curve_speed)
+        baseline_steering = steering
+        baseline_target_speed = target_speed
+        if self.policy is not None:
+            try:
+                path_state = self.controller.path_state(self.position, self.yaw)
+                observation = pack_observation(
+                    ranges if raw_ranges is None else raw_ranges, angles,
+                    self.speed, path_state.heading_error,
+                    path_state.cross_track_error,
+                    path_state.upcoming_curvature, baseline_steering,
+                    baseline_target_speed, self.max_range,
+                )
+                steering_delta, speed_multiplier = self.policy.predict(observation)
+                steering = float(np.clip(baseline_steering + steering_delta, -1.0, 1.0))
+                target_speed = min(
+                    baseline_target_speed * speed_multiplier, self.target_speed
+                )
+            except ValueError as exc:
+                steering, target_speed = baseline_steering, baseline_target_speed
+                if time.monotonic() - self.last_policy_warning > 5.0:
+                    self.get_logger().warn(f'Residual observation/action invalid: {exc}; using baseline')
+                    self.last_policy_warning = time.monotonic()
         if self.safety_enabled:
             decision = self.safety.apply(
                 ranges if raw_ranges is None else raw_ranges,
                 angles,
-                baseline_steering=steering,
-                baseline_target_speed=target_speed,
+                baseline_steering=baseline_steering,
+                baseline_target_speed=baseline_target_speed,
+                proposed_steering=steering,
+                proposed_target_speed=target_speed,
+                speed_ceiling=self.target_speed if self.policy is not None else None,
             )
             steering, target_speed = decision.steering, decision.target_speed
             if not decision.sensor_valid and time.monotonic() - self.last_safety_warning > 5.0:

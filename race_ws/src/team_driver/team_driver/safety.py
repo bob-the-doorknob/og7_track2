@@ -18,7 +18,7 @@ class SafetyDecision(NamedTuple):
 
 
 class LidarSafety:
-    """Limit speed along the car's swept path without raising baseline speed."""
+    """Limit speed along the car's swept path and a configured ceiling."""
 
     def __init__(
         self,
@@ -142,11 +142,13 @@ class LidarSafety:
         baseline_target_speed: float,
         proposed_steering: float | None = None,
         proposed_target_speed: float | None = None,
+        speed_ceiling: float | None = None,
     ) -> SafetyDecision:
-        """Clamp a proposed action to the measured baseline and LiDAR limit.
+        """Clamp a proposed action to a speed ceiling and LiDAR limit.
 
-        A future residual policy may propose steering and speed. A proposal
-        that enters a substantially tighter obstacle corridor is rejected.
+        By default the baseline speed is the ceiling. A residual policy can
+        use the driver's configured global target as its ceiling instead.
+        A proposal entering a tighter obstacle corridor is rejected.
         """
         baseline_steering = (
             float(np.clip(baseline_steering, -1.0, 1.0))
@@ -155,6 +157,11 @@ class LidarSafety:
         baseline_target_speed = (
             max(float(baseline_target_speed), 0.0)
             if math.isfinite(baseline_target_speed) else 0.0
+        )
+        speed_ceiling = (
+            max(float(speed_ceiling), 0.0)
+            if speed_ceiling is not None and math.isfinite(speed_ceiling)
+            else baseline_target_speed
         )
         if proposed_steering is None:
             proposed_steering = baseline_steering
@@ -188,12 +195,14 @@ class LidarSafety:
         )
         steering = baseline_steering if rejected else proposed_steering
         clearance = baseline_clearance if rejected else proposed_clearance
+        if rejected:
+            proposed_target_speed = baseline_target_speed
         speed_limit = math.sqrt(
             2.0 * self.max_deceleration
             * max(0.0, clearance - self.stop_margin)
         )
         target_speed = min(
-            baseline_target_speed, proposed_target_speed, speed_limit
+            speed_ceiling, proposed_target_speed, speed_limit
         )
         return SafetyDecision(
             steering, float(target_speed), float(front), float(clearance),

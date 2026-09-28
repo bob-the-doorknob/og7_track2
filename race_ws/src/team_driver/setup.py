@@ -16,6 +16,7 @@ setup(
         (os.path.join('share', package_name, 'config'), glob('config/*.yaml')),
         (os.path.join('share', package_name, 'maps'),
          [os.path.join('..', '..', '..', 'maps', 'icra26_compete_centerline.csv')]),
+        (os.path.join('share', package_name, 'weights'), glob('weights/*.npz')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,

@@ -14,6 +14,7 @@ driver:
     speed_kp: 0.24
     speed_ki: 0.08
     baseline_only: true
+    policy_path: ""               # .npz path; used only when baseline_only is false
     safety_enabled: true
     safety_side_margin: 0.08      # [m] added to the 0.135 m car half-width
     safety_stop_margin: 0.25      # [m] bumper and uncertainty allowance

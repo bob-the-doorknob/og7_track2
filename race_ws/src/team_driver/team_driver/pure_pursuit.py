@@ -5,8 +5,15 @@ from __future__ import annotations
 import csv
 import math
 from pathlib import Path
+from typing import NamedTuple
 
 import numpy as np
+
+
+class PathState(NamedTuple):
+    heading_error: float
+    cross_track_error: float
+    upcoming_curvature: float
 
 
 class PurePursuit:
@@ -99,3 +106,37 @@ class PurePursuit:
             steering_rad / self.max_steering_rad, -1.0, 1.0
         ))
         return steering, lookahead, curvature
+
+    def path_state(self, position: tuple[float, float], yaw: float) -> PathState:
+        """Describe pose error and the next 1.5 m of path for the policy."""
+        if not all(math.isfinite(value) for value in (*position, yaw)):
+            raise ValueError("pose must be finite")
+        index, projection, arc = self._project(position)
+        tangent = self.segments[index] / self.segment_lengths[index]
+        path_heading = math.atan2(tangent[1], tangent[0])
+        heading_error = math.atan2(
+            math.sin(path_heading - yaw), math.cos(path_heading - yaw)
+        )
+        displacement = np.asarray(position, dtype=np.float64) - projection
+        cross_track_error = float(
+            tangent[0] * displacement[1] - tangent[1] * displacement[0]
+        )
+
+        p0 = self._point_at(arc)
+        p1 = self._point_at(arc + 0.75)
+        p2 = self._point_at(arc + 1.50)
+        first, second = p1 - p0, p2 - p1
+        chord = p2 - p0
+        denominator = (
+            np.linalg.norm(first) * np.linalg.norm(second)
+            * np.linalg.norm(chord)
+        )
+        upcoming_curvature = (
+            2.0 * float(first[0] * second[1] - first[1] * second[0])
+            / denominator
+            if denominator > 1e-6 else 0.0
+        )
+        return PathState(
+            float(heading_error), cross_track_error,
+            float(upcoming_curvature),
+        )

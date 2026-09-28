@@ -60,6 +60,13 @@ class LidarSafetyTests(unittest.TestCase):
         )
         self.assertEqual(decision.target_speed, 1.8)
 
+    def test_explicit_ceiling_allows_bounded_residual_speed(self):
+        decision = self.safety.apply(
+            self.clear, self.angles, 0.0, 1.0,
+            proposed_target_speed=1.5, speed_ceiling=1.4,
+        )
+        self.assertEqual(decision.target_speed, 1.4)
+
     def test_nonfinite_proposal_reverts_to_baseline(self):
         decision = self.safety.apply(
             self.clear, self.angles, 0.1, 1.8,

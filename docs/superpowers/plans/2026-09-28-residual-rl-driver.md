@@ -126,11 +126,19 @@ Completed safety comparison on 2026-09-29: `results/task2_safety__task2_safety_2
 - Create: `race_ws/src/team_driver/team_driver/residual_policy.py`
 - Modify: `race_ws/src/team_driver/team_driver/driver.py`
 
-- [ ] Define one fixed observation vector containing compact LiDAR sectors, current speed, path heading error, cross-track error, and upcoming path curvature.
-- [ ] Define two bounded policy outputs: steering adjustment and a target-speed multiplier.
-- [ ] Load exported weights once during node startup; perform only small NumPy matrix operations in the scan callback.
-- [ ] If the policy is disabled, missing, or produces a non-finite value, use the classical baseline and emit a clear diagnostic.
-- [ ] Ensure the same observation normalization and action limits are used by the trainer and runtime driver.
+- [x] Define one fixed observation vector containing compact LiDAR sectors, current speed, path heading error, cross-track error, and upcoming path curvature.
+- [x] Define two bounded policy outputs: steering adjustment and a target-speed multiplier.
+- [x] Load exported weights once during node startup; perform only small NumPy matrix operations in the scan callback.
+- [x] If the policy is disabled, missing, or produces a non-finite value, use the classical baseline and emit a clear diagnostic.
+- [x] Ensure the same observation normalization and action limits are used by the trainer and runtime driver.
+
+Implemented in `team_driver/residual_policy.py` as observation/model format v1.
+The trainer in Task 4/5 should import `pack_observation` and `decode_action`
+directly. Keep `baseline_only: true` until a learned model beats the classical
+controller. A zero-weight policy completed a two-lap compete-build integration
+run on 2026-09-29: `results/task3_zero__task3_zero_20260929.json` reports
+`COMPLETE`, `scored: true`, 2/2 laps, zero collisions, zero callback errors,
+and a 58.625 s total. This validates the policy path, not learned performance.
 
 ### Task 4: Build the training-only simulator environment
 
