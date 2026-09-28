@@ -96,12 +96,16 @@ The current local Git branch is `track2`, and its `origin` remote points to the 
 - Create: `race_ws/src/team_driver/team_driver/speed_controller.py`
 - Use: `maps/icra26_compete_centerline.csv`
 
-- [ ] Implement centerline loading and pose projection using the existing `/odom` pose.
-- [ ] Implement pure pursuit with a speed-scaled lookahead and a configurable conservative target speed.
-- [ ] Implement a feed-forward plus PI speed controller with a clamped integral; avoid sustained hard reverse throttle.
-- [ ] Add a baseline-only parameter/mode that remains available after RL integration.
-- [ ] Keep the LiDAR preprocessing and `devkit_qos()` behavior from the starter driver.
-- [ ] Confirm the baseline completes a 10-lap evaluation and retain those result files as the comparison point.
+- [x] Implement centerline loading and pose projection using the existing `/odom` pose.
+- [x] Implement pure pursuit with a speed-scaled lookahead and a configurable conservative target speed.
+- [x] Implement a feed-forward plus PI speed controller with a clamped integral; avoid sustained hard reverse throttle.
+- [x] Add a baseline-only parameter/mode that remains available after RL integration.
+- [x] Keep the LiDAR preprocessing and `devkit_qos()` behavior from the starter driver.
+- [x] Confirm the baseline completes a 10-lap evaluation and retain those result files as the comparison point.
+
+Evaluation attempt on 2026-09-29: the package built, but the referee aborted before scoring because the AutoDRIVE bridge published no telemetry for 120 seconds. The unscored diagnostic is in `results/task1_baseline__task1_baseline_20260929.json`; it is not a baseline comparison run.
+
+Completed baseline on 2026-09-29: `results/task1_baseline__task1_baseline_connected_20260929.json` is `COMPLETE`, `scored: true`, with 10/10 timed laps, zero collisions, a 29.3355 s best lap, and a 295.6529 s penalized 10-lap total (real-time factor 0.811). This run used the compete build in the Windows simulator connected to the container bridge.
 
 ### Task 2: Add a bounded safety layer
 

@@ -1,72 +1,12 @@
 #!/usr/bin/env python3
-"""YOUR DRIVER GOES HERE.
-
-This is the node the judges run. Keep `driver` as the executable name and keep
-publishing to the two AutoDRIVE command topics; everything else is yours to
-change - rewrite this file completely if you want to.
-
---------------------------------------------------------------------------
-THIS TEMPLATE DOES NOT DRIVE
---------------------------------------------------------------------------
-It is wiring, not a driver. It connects to the simulator, subscribes to the
-sensors, and then publishes a slow constant throttle with the wheels straight.
-It will roll forward off the line and into the first thing in front of it.
-That is deliberate and it is the whole point: **there is no algorithm here and
-no algorithm is shipped anywhere else in this repository.** Writing one is the
-hackathon.
-
-What the template is good for is proving your setup works. If the car moves
-when you run it, then the image, the bridge, the QoS settings, the workspace
-and your commands are all correct, and every problem left is yours.
-
-    ros2 run team_driver driver
-    ros2 launch team_driver driver.launch.py
-
-`docs/04-algorithms.md` lists the approaches worth starting from - reactive
-ones that need nothing but the LiDAR, planners that follow a line, model-based
-control, and learned policies - with what each needs and where each breaks.
-Pick one and replace `plan()` below.
-
---------------------------------------------------------------------------
-THE CONTROL INTERFACE IS NOT A SPEED REQUEST
---------------------------------------------------------------------------
-AutoDRIVE takes a normalised throttle, not a target speed:
-
-    /autodrive/roboracer_1/throttle_command   Float32, [-1, 1]
-    /autodrive/roboracer_1/steering_command   Float32, [-1, 1]  ->  +-0.5236 rad
-
--1 is full reverse, 0 is coasting, +1 is full torque. There is no speed
-controller between you and the motor, so "go at 3 m/s" is a control problem you
-now own. Whatever algorithm you pick will decide a *target* speed; turning that
-into a throttle is a separate job, and it is worth several seconds a lap. See
-`docs/04-algorithms.md` §4.1.
-
---------------------------------------------------------------------------
-WHAT YOU MAY READ  (see docs/06-rules.md)
---------------------------------------------------------------------------
-    .../lidar            1080 beams over 270 deg, 0.06-10 m
-    .../imu              orientation, angular velocity, linear acceleration
-    .../left_encoder     wheel angle, 16 PPR x 120
-    .../right_encoder
-    .../front_camera     RGB image (headless runs do not produce one)
-    .../throttle         actuator feedback
-    .../steering
-    .../ips              ground-truth position - ALLOWED here, see below
-    .../odom             ground-truth pose and velocity - ALLOWED, RECOMMENDED
-    .../lap_count        .../lap_time  .../last_lap_time  .../best_lap_time
-    .../collision_count
-    /tf, /tf_static
-
-The AutoDRIVE competition rules mark the pose and race-telemetry topics
-"restricted": legal for development, not at race time. **The hackathon does not
-adopt that restriction for reading.** Every input above is yours to use during
-a scored run, ground-truth pose included. What stays restricted is *publishing*
-`/autodrive/reset_command`, which is the referee's (rule 31).
-"""
+"""Track 2 ROS driver using a centreline pure pursuit baseline."""
 
 import math
+import time
+from pathlib import Path
 
 import numpy as np
+from ament_index_python.packages import get_package_share_directory
 import rclpy
 from geometry_msgs.msg import Point
 from nav_msgs.msg import Odometry
@@ -76,6 +16,9 @@ from rclpy.qos import (QoSDurabilityPolicy, QoSHistoryPolicy, QoSProfile,
 from sensor_msgs.msg import LaserScan
 from std_msgs.msg import Float32
 from visualization_msgs.msg import Marker, MarkerArray
+
+from team_driver.pure_pursuit import PurePursuit
+from team_driver.speed_controller import SpeedController
 
 # The steering command is normalised; this is what +-1.0 actually means.
 MAX_STEERING_RAD = 0.5236
@@ -101,15 +44,58 @@ class Driver(Node):
     def __init__(self):
         super().__init__('driver')
 
-        # Declared parameters can be retuned without editing code:
-        #   ros2 run team_driver driver --ros-args -p crawl_throttle:=0.3
-        # Add your own as you go; config/driver_params.yaml loads them.
+        # config/driver_params.yaml supplies values during evaluation.
         self.declare_parameter('vehicle_ns', '/autodrive/roboracer_1')
-        self.declare_parameter('crawl_throttle', 0.12)    # [-1, 1], open loop
         self.declare_parameter('max_range', 10.0)         # [m] clip the scan here
 
-        self.crawl_throttle = self.get_parameter('crawl_throttle').value
-        self.max_range = self.get_parameter('max_range').value
+        self.declare_parameter('centerline_path', '')
+        self.declare_parameter('target_speed', 1.8)
+        self.declare_parameter('max_lateral_accel', 1.5)
+        self.declare_parameter('wheelbase', 0.324)
+        self.declare_parameter('lookahead_min', 0.55)
+        self.declare_parameter('lookahead_max', 1.8)
+        self.declare_parameter('lookahead_speed_gain', 0.35)
+        self.declare_parameter('speed_ff_gain', 0.16)
+        self.declare_parameter('speed_kp', 0.24)
+        self.declare_parameter('speed_ki', 0.08)
+        self.declare_parameter('baseline_only', True)
+
+        self.max_range = float(self.get_parameter('max_range').value)
+        self.target_speed = max(float(self.get_parameter('target_speed').value), 0.0)
+        self.max_lateral_accel = max(
+            float(self.get_parameter('max_lateral_accel').value), 0.1
+        )
+        self.baseline_only = bool(self.get_parameter('baseline_only').value)
+        configured_path = str(self.get_parameter('centerline_path').value).strip()
+        if configured_path:
+            centerline_path = Path(configured_path)
+        else:
+            try:
+                centerline_path = Path(get_package_share_directory('team_driver')) \
+                    / 'maps' / 'icra26_compete_centerline.csv'
+            except Exception:
+                centerline_path = Path(__file__).resolve().parents[4] / 'maps' \
+                    / 'icra26_compete_centerline.csv'
+
+        self.controller = PurePursuit(
+            centerline_path=centerline_path,
+            wheelbase=float(self.get_parameter('wheelbase').value),
+            max_steering_rad=MAX_STEERING_RAD,
+            lookahead_min=float(self.get_parameter('lookahead_min').value),
+            lookahead_max=float(self.get_parameter('lookahead_max').value),
+            lookahead_speed_gain=float(
+                self.get_parameter('lookahead_speed_gain').value
+            ),
+        )
+        self.speed_controller = SpeedController(
+            feedforward_gain=float(self.get_parameter('speed_ff_gain').value),
+            kp=float(self.get_parameter('speed_kp').value),
+            ki=float(self.get_parameter('speed_ki').value),
+        )
+        self.get_logger().info(
+            f'Loaded {len(self.controller.points)} centreline points from '
+            f'{centerline_path}; target speed {self.target_speed:.2f} m/s'
+        )
 
         ns = str(self.get_parameter('vehicle_ns').value).rstrip('/')
         qos = devkit_qos()
@@ -127,11 +113,15 @@ class Driver(Node):
         self.position = None      # (x, y) in the `world` frame
         self.yaw = 0.0            # [rad]
         self.speed = 0.0          # [m/s]
+        self.last_odom_time = None
+        self.last_control_time = None
 
         self._marker_divisor = 0
-        self.get_logger().warn(
-            'team_driver is up, but this template has no driving logic: it will '
-            'crawl straight ahead until it hits something. Implement plan().')
+        if not self.baseline_only:
+            self.get_logger().warn(
+                'baseline_only is false, but no residual policy is installed yet; '
+                'running the classical baseline.'
+            )
 
     # ------------------------------------------------------------------
     # Where the car is. Free, accurate, and worth building on.
@@ -142,6 +132,7 @@ class Driver(Node):
         self.yaw = math.atan2(2.0 * (q.w * q.z + q.x * q.y),
                               1.0 - 2.0 * (q.y * q.y + q.z * q.z))
         self.speed = math.hypot(msg.twist.twist.linear.x, msg.twist.twist.linear.y)
+        self.last_odom_time = time.monotonic()
 
     def ips_callback(self, msg):
         """Position alone, at the same rate. /odom carries this plus velocity."""
@@ -151,8 +142,11 @@ class Driver(Node):
     # The control loop, once per LiDAR scan (40 Hz).
     # ------------------------------------------------------------------
     def scan_callback(self, scan):
+        now = time.monotonic()
+        dt = 0.025 if self.last_control_time is None else now - self.last_control_time
+        self.last_control_time = now
         ranges, angles = self.preprocess(scan)
-        steering, throttle = self.plan(ranges, angles)
+        steering, throttle = self.plan(ranges, angles, dt)
         self.publish(steering, throttle)
 
         self._marker_divisor = (self._marker_divisor + 1) % 10
@@ -174,27 +168,34 @@ class Driver(Node):
         return ranges, angles
 
     # ==================================================================
-    # THIS IS THE PART YOU WRITE.
+    # Classical baseline controller.
     # ==================================================================
-    def plan(self, ranges, angles):
-        """Decide what the car should do, given the latest scan.
+    def plan(self, ranges, angles, dt=0.025):
+        """Follow the map centreline with pure pursuit and closed-loop speed."""
+        del ranges, angles
+        odom_fresh = (
+            self.last_odom_time is not None
+            and time.monotonic() - self.last_odom_time <= 0.5
+        )
+        pose_valid = (
+            self.position is not None
+            and all(math.isfinite(value) for value in self.position)
+            and math.isfinite(self.yaw)
+            and math.isfinite(self.speed)
+        )
+        if not odom_fresh or not pose_valid:
+            self.speed_controller.reset()
+            return 0.0, 0.0
 
-        Returns `(steering, throttle)`, both normalised to [-1, 1]. Steering
-        is a fraction of full lock (MAX_STEERING_RAD); throttle is torque, not
-        speed.
-
-        Right now it returns "straight ahead, slowly", which is not driving:
-        it ignores `ranges` entirely, so the car will hold its heading off the
-        line and put itself into the first barrier it meets. Replace the whole
-        method.
-
-        You have more to work with than the scan. `self.position`, `self.yaw`
-        and `self.speed` are ground truth from /odom and are yours to use, and
-        nothing stops you subscribing to more topics, loading a map or a line
-        you computed offline, or running a policy you trained. See
-        docs/04-algorithms.md for the approaches and what each one needs.
-        """
-        return 0.0, self.crawl_throttle
+        steering, _, curvature = self.controller.command(
+            self.position, self.yaw, self.speed
+        )
+        curve_speed = math.sqrt(
+            self.max_lateral_accel / max(abs(curvature), 1e-4)
+        )
+        target_speed = min(self.target_speed, curve_speed)
+        throttle = self.speed_controller.command(target_speed, self.speed, dt)
+        return steering, throttle
 
     # ------------------------------------------------------------------
     # Output

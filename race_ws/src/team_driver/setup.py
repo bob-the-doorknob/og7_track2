@@ -14,6 +14,8 @@ setup(
         ('share/' + package_name, ['package.xml']),
         (os.path.join('share', package_name, 'launch'), glob('launch/*.launch.py')),
         (os.path.join('share', package_name, 'config'), glob('config/*.yaml')),
+        (os.path.join('share', package_name, 'maps'),
+         [os.path.join('..', '..', '..', 'maps', 'icra26_compete_centerline.csv')]),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
