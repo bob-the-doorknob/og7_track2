@@ -113,10 +113,12 @@ Completed baseline on 2026-09-29: `results/task1_baseline__task1_baseline_connec
 - Create: `race_ws/src/team_driver/team_driver/safety.py`
 - Modify: `race_ws/src/team_driver/team_driver/driver.py`
 
-- [ ] Implement front-clearance and steering-aware speed limits from LiDAR.
-- [ ] Sanitize discontinuities and empty/invalid ranges before calculating clearance.
-- [ ] Allow the safety layer to reduce target speed or reject a residual action; never let it increase the baseline command beyond the configured limit.
-- [ ] Preserve a baseline-only mode so every later training or runtime failure has a usable fallback.
+- [x] Implement front-clearance and steering-aware speed limits from LiDAR.
+- [x] Sanitize discontinuities and empty/invalid ranges before calculating clearance.
+- [x] Allow the safety layer to reduce target speed or reject a residual action; never let it increase the baseline command beyond the configured limit.
+- [x] Preserve a baseline-only mode so every later training or runtime failure has a usable fallback.
+
+Completed safety comparison on 2026-09-29: `results/task2_safety__task2_safety_20260929.json` is `COMPLETE`, `scored: true`, with 10/10 timed laps, zero collisions, a 29.4345 s best lap, and a 294.7702 s penalized 10-lap total (real-time factor 0.754, callback errors 0). This single run checks completion and safety behavior; the 0.8827 s total-time difference from Task 1 is too small to treat as an established speed gain.
 
 ### Task 3: Define the residual policy interface
 

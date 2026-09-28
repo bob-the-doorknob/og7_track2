@@ -18,6 +18,7 @@ from std_msgs.msg import Float32
 from visualization_msgs.msg import Marker, MarkerArray
 
 from team_driver.pure_pursuit import PurePursuit
+from team_driver.safety import LidarSafety
 from team_driver.speed_controller import SpeedController
 
 # The steering command is normalised; this is what +-1.0 actually means.
@@ -59,6 +60,11 @@ class Driver(Node):
         self.declare_parameter('speed_kp', 0.24)
         self.declare_parameter('speed_ki', 0.08)
         self.declare_parameter('baseline_only', True)
+        self.declare_parameter('safety_enabled', True)
+        self.declare_parameter('safety_side_margin', 0.08)
+        self.declare_parameter('safety_stop_margin', 0.25)
+        self.declare_parameter('safety_max_deceleration', 2.0)
+        self.declare_parameter('safety_horizon', 3.0)
 
         self.max_range = float(self.get_parameter('max_range').value)
         self.target_speed = max(float(self.get_parameter('target_speed').value), 0.0)
@@ -66,6 +72,7 @@ class Driver(Node):
             float(self.get_parameter('max_lateral_accel').value), 0.1
         )
         self.baseline_only = bool(self.get_parameter('baseline_only').value)
+        self.safety_enabled = bool(self.get_parameter('safety_enabled').value)
         configured_path = str(self.get_parameter('centerline_path').value).strip()
         if configured_path:
             centerline_path = Path(configured_path)
@@ -92,6 +99,17 @@ class Driver(Node):
             kp=float(self.get_parameter('speed_kp').value),
             ki=float(self.get_parameter('speed_ki').value),
         )
+        self.safety = LidarSafety(
+            wheelbase=float(self.get_parameter('wheelbase').value),
+            max_steering_rad=MAX_STEERING_RAD,
+            side_margin=float(self.get_parameter('safety_side_margin').value),
+            stop_margin=float(self.get_parameter('safety_stop_margin').value),
+            max_deceleration=float(
+                self.get_parameter('safety_max_deceleration').value
+            ),
+            horizon=float(self.get_parameter('safety_horizon').value),
+            max_range=self.max_range,
+        )
         self.get_logger().info(
             f'Loaded {len(self.controller.points)} centreline points from '
             f'{centerline_path}; target speed {self.target_speed:.2f} m/s'
@@ -115,6 +133,7 @@ class Driver(Node):
         self.speed = 0.0          # [m/s]
         self.last_odom_time = None
         self.last_control_time = None
+        self.last_safety_warning = 0.0
 
         self._marker_divisor = 0
         if not self.baseline_only:
@@ -146,7 +165,7 @@ class Driver(Node):
         dt = 0.025 if self.last_control_time is None else now - self.last_control_time
         self.last_control_time = now
         ranges, angles = self.preprocess(scan)
-        steering, throttle = self.plan(ranges, angles, dt)
+        steering, throttle = self.plan(ranges, angles, dt, scan.ranges)
         self.publish(steering, throttle)
 
         self._marker_divisor = (self._marker_divisor + 1) % 10
@@ -170,9 +189,8 @@ class Driver(Node):
     # ==================================================================
     # Classical baseline controller.
     # ==================================================================
-    def plan(self, ranges, angles, dt=0.025):
-        """Follow the map centreline with pure pursuit and closed-loop speed."""
-        del ranges, angles
+    def plan(self, ranges, angles, dt=0.025, raw_ranges=None):
+        """Follow the centreline and lower the target speed when LiDAR requires."""
         odom_fresh = (
             self.last_odom_time is not None
             and time.monotonic() - self.last_odom_time <= 0.5
@@ -194,6 +212,17 @@ class Driver(Node):
             self.max_lateral_accel / max(abs(curvature), 1e-4)
         )
         target_speed = min(self.target_speed, curve_speed)
+        if self.safety_enabled:
+            decision = self.safety.apply(
+                ranges if raw_ranges is None else raw_ranges,
+                angles,
+                baseline_steering=steering,
+                baseline_target_speed=target_speed,
+            )
+            steering, target_speed = decision.steering, decision.target_speed
+            if not decision.sensor_valid and time.monotonic() - self.last_safety_warning > 5.0:
+                self.get_logger().warn('LiDAR forward sector is invalid; holding zero target speed')
+                self.last_safety_warning = time.monotonic()
         throttle = self.speed_controller.command(target_speed, self.speed, dt)
         return steering, throttle
 
