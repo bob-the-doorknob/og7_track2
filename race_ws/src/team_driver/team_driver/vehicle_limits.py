@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Sequence
 
@@ -27,6 +27,21 @@ class VehicleLimits:
                 or not math.isfinite(self.control_delay_s)
                 or self.control_delay_s < 0.0):
             raise ValueError("vehicle limits must be finite and physically valid")
+
+
+def planning_limits(measured: VehicleLimits, lateral_override: float = 0.0,
+                    top_speed_override: float = 0.0) -> VehicleLimits:
+    """Use a scored experimental cornering allowance without rewriting telemetry."""
+    if (not math.isfinite(lateral_override) or lateral_override < 0.0
+            or not math.isfinite(top_speed_override) or top_speed_override < 0.0):
+        raise ValueError("planning overrides must be finite and nonnegative")
+    if lateral_override == 0.0 and top_speed_override == 0.0:
+        return measured
+    return replace(
+        measured,
+        lateral_mps2=float(lateral_override or measured.lateral_mps2),
+        top_speed_mps=float(top_speed_override or measured.top_speed_mps),
+    )
 
 
 def combine_limits(runs: Sequence[VehicleLimits]) -> VehicleLimits:

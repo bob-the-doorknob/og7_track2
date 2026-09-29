@@ -20,11 +20,12 @@ from std_msgs.msg import Float32
 from visualization_msgs.msg import Marker, MarkerArray
 
 from team_driver.pure_pursuit import PurePursuit
+from team_driver.map_guard import MapGuard
 from team_driver.residual_policy import ResidualPolicy, pack_observation
 from team_driver.safety import LidarSafety
 from team_driver.speed_controller import SpeedController
 from team_driver.speed_profile import SpeedProfile
-from team_driver.vehicle_limits import load_limits
+from team_driver.vehicle_limits import load_limits, planning_limits
 
 # The steering command is normalised; this is what +-1.0 actually means.
 MAX_STEERING_RAD = 0.5236
@@ -59,6 +60,9 @@ class Driver(Node):
         self.declare_parameter('max_lateral_accel', 1.5)
         self.declare_parameter('max_braking_decel', 2.0)
         self.declare_parameter('vehicle_limits_path', '')
+        self.declare_parameter('planning_lateral_mps2', 0.0)
+        self.declare_parameter('planning_top_speed_mps', 0.0)
+        self.declare_parameter('map_guard_path', '')
         self.declare_parameter('wheelbase', 0.324)
         self.declare_parameter('lookahead_min', 0.55)
         self.declare_parameter('lookahead_max', 1.8)
@@ -87,6 +91,12 @@ class Driver(Node):
                               'config' / 'vehicle_limits.yaml')
         self.vehicle_limits = load_limits(Path(limits_path)) if limits_path else None
         if self.vehicle_limits is not None:
+            self.vehicle_limits = planning_limits(
+                self.vehicle_limits,
+                float(self.get_parameter('planning_lateral_mps2').value),
+                float(self.get_parameter('planning_top_speed_mps').value),
+            )
+        if self.vehicle_limits is not None:
             self.target_speed = self.vehicle_limits.top_speed_mps
             self.max_lateral_accel = self.vehicle_limits.lateral_mps2
         configured_path = str(self.get_parameter('centerline_path').value).strip()
@@ -110,6 +120,16 @@ class Driver(Node):
                 self.get_parameter('lookahead_speed_gain').value
             ),
         )
+        guard_path = str(self.get_parameter('map_guard_path').value).strip()
+        if guard_path == 'packaged':
+            guard_path = str(Path(get_package_share_directory('team_driver')) /
+                             'maps' / 'icra26_compete.yaml')
+        self.map_guard = None
+        if guard_path:
+            try:
+                self.map_guard = MapGuard(Path(guard_path), self.controller)
+            except (OSError, KeyError, ValueError) as exc:
+                self.get_logger().warn(f'Map guard unavailable ({exc}); using LiDAR range cap')
         self.speed_profile = SpeedProfile(
             self.controller, straight_speed=self.target_speed,
             max_lateral_accel=self.max_lateral_accel,
@@ -272,6 +292,11 @@ class Driver(Node):
                     self.get_logger().warn(f'Residual observation/action invalid: {exc}; using baseline')
                     self.last_policy_warning = time.monotonic()
         if self.safety_enabled:
+            map_certified = (
+                self.map_guard is not None
+                and self.map_guard.certifies_clear_horizon(
+                    self.position, self.yaw, self.speed, steering)
+            )
             decision = self.safety.apply(
                 ranges if raw_ranges is None else raw_ranges,
                 angles,
@@ -280,6 +305,7 @@ class Driver(Node):
                 proposed_steering=steering,
                 proposed_target_speed=target_speed,
                 speed_ceiling=self.target_speed if self.policy is not None else None,
+                clear_horizon_certified=map_certified,
             )
             steering, target_speed = decision.steering, decision.target_speed
             if not decision.sensor_valid and time.monotonic() - self.last_safety_warning > 5.0:

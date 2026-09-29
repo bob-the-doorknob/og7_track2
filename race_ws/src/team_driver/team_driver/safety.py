@@ -143,6 +143,7 @@ class LidarSafety:
         proposed_steering: float | None = None,
         proposed_target_speed: float | None = None,
         speed_ceiling: float | None = None,
+        clear_horizon_certified: bool = False,
     ) -> SafetyDecision:
         """Clamp a proposed action to a speed ceiling and LiDAR limit.
 
@@ -201,6 +202,8 @@ class LidarSafety:
             2.0 * self.max_deceleration
             * max(0.0, clearance - self.stop_margin)
         )
+        if clear_horizon_certified and clearance >= self.horizon - self.path_step:
+            speed_limit = float("inf")
         target_speed = min(
             speed_ceiling, proposed_target_speed, speed_limit
         )

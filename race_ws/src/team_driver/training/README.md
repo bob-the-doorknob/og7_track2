@@ -189,6 +189,21 @@ exploration and one collision. The deterministic scored comparison is in
 `docs/track2-44-comparison.md`; its selected-policy runs completed without
 collisions and were faster than the baseline runs.
 
+## Faster classical driver
+
+The leading faster classical driver is `config/fast_corner_15_params.yaml`.
+After sourcing the worktree ROS overlay, run it with:
+
+```bash
+ros2 run team_driver driver --ros-args \
+  --params-file /hackathon/.worktrees/task1-residual-rl-baseline/race_ws/src/team_driver/config/fast_corner_15_params.yaml
+```
+
+This uses the original racing line and a candidate-only 15.0 m/s² lateral
+planning allowance. The measured `config/vehicle_limits.yaml` remains
+unchanged. The old `driver_params.yaml` still loads the 4.4 m/s RL actor.
+Only run one driver at a time, and stop the referee before manual driving.
+
 ## Offline racing-line search
 
 With the container running, from `race_ws/src/team_driver` in the isolated

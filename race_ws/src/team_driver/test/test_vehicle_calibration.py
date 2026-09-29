@@ -5,6 +5,22 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from team_driver.vehicle_limits import VehicleLimits
+
+
+def test_planning_lateral_override_keeps_measurement_unchanged():
+    from team_driver.vehicle_limits import planning_limits
+
+    measured = VehicleLimits(6.3, 2.8, 2.8, 3.06, 0.016)
+    planned = planning_limits(measured, lateral_override=7.0, top_speed_override=9.0)
+    assert measured.lateral_mps2 == 3.06
+    assert planned.lateral_mps2 == 7.0
+    assert planned.top_speed_mps == 9.0
+    assert measured.top_speed_mps == 6.3
+    assert planning_limits(measured) is measured
+    with pytest.raises(ValueError):
+        planning_limits(measured, -1.0)
+
 _COLUMNS = (
     "time_s", "x_m", "y_m", "yaw_rad", "speed_mps", "throttle",
     "steering", "arc_m", "clearance_m", "lap_count", "collision_count",

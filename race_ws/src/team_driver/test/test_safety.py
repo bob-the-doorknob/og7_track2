@@ -60,6 +60,20 @@ class LidarSafetyTests(unittest.TestCase):
         )
         self.assertEqual(decision.target_speed, 1.8)
 
+    def test_map_certified_clear_horizon_does_not_impose_scan_range_ceiling(self):
+        guard = LidarSafety(horizon=10.0, max_range=10.0,
+                            max_deceleration=2.0)
+        ordinary = guard.apply(self.clear, self.angles, 0.0, 9.0)
+        certified = guard.apply(self.clear, self.angles, 0.0, 9.0,
+                                clear_horizon_certified=True)
+        self.assertLess(ordinary.target_speed, 9.0)
+        self.assertEqual(certified.target_speed, 9.0)
+        obstacle = self.clear.copy()
+        obstacle[self.forward_index] = 4.0
+        blocked = guard.apply(obstacle, self.angles, 0.0, 9.0,
+                              clear_horizon_certified=True)
+        self.assertLess(blocked.target_speed, 9.0)
+
     def test_explicit_ceiling_allows_bounded_residual_speed(self):
         decision = self.safety.apply(
             self.clear, self.angles, 0.0, 1.0,

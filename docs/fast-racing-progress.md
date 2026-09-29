@@ -54,7 +54,58 @@ uses 95% of the 99th percentile clean observed lateral acceleration from
 the three calibration runs. These are empirical starting values, not known
 friction or motor limits.
 
-The new baseline is a candidate until multiple complete ten-lap runs and
-the later line/tracker changes establish which version is best. The default
+The faster classical line and controller have now completed repeat ten-lap
+runs. Later tracker changes and RL training will establish the final selection. The default
 RL actor was trained at 4.4 m/s and must not be reused with the faster
 baseline without retraining its observation and action policy.
+
+## High-speed corner sweep after visual review
+
+The hand-sketched outside-entry/inside-apex line motivated a map-valid
+0.35 m outward entry adjustment near path arc 41 m. It kept a conservative
+0.291 m map clearance, but scored 53.5544 s over three laps versus 51.9443 s
+for the existing line at the same 7.0 m/s² planning setting. It was rejected.
+The starting grid pose belongs to the referee; a line can bias where the car
+drives after the start, but cannot move the reset pose.
+
+The original measured lateral estimate, 3.06 m/s², reflected the earlier
+slow runs and did not establish the simulator's maximum corner capability.
+`planning_lateral_mps2` now allows candidate-only cornering sweeps without
+rewriting that measured YAML. These are requested planning accelerations,
+not measurements of achieved tire force.
+
+| Planning lateral acceleration | Timed laps | Best lap | Penalized total | Collisions |
+| ---: | ---: | ---: | ---: | ---: |
+| 7.0 m/s² | 10 | 17.1222 s | 174.8131 s | 0 |
+| 9.0 m/s² | 3 | 16.9663 s | 51.4716 s | 0 |
+| 10.0 m/s² | 3 | 16.4256 s | 51.1168 s | 0 |
+| 12.0 m/s² | 3 | 16.0808 s | 48.9810 s | 0 |
+| 15.0 m/s² | 3 | 15.3006 s | 46.1528 s | 0 |
+| 17.5 m/s² | 3 | 15.5176 s | 46.6200 s | 0 |
+| 20.0 m/s² | 3 | 15.1325 s | 46.6659 s | 0 |
+| 15.0 m/s² | 10 | 15.4846 s | 161.9163 s | 0 |
+| 15.0 m/s² repeat | 10 | 15.6030 s | 160.3860 s | 0 |
+
+The 15.0 m/s² ten-lap run is the leading complete classical candidate.
+Its unedited referee JSON is
+`results/submitted/DeepSpeedRobot_fast_corner_15_full__20260929T185715Z.json`.
+It improves the earlier 6.30 m/s fast baseline by 4.5203 s on best lap and
+32.0886 s on ten-lap total. The selected 4.4 m/s RL driver remains the
+default until repeat full-run evidence and the new RL training are complete.
+The repeat complete run, also collision-free, scored 15.6030 s best and
+160.3860 s total. Its unedited result is
+`results/submitted/DeepSpeedRobot_fast_corner_15_repeat__20260929T190302Z.json`.
+Both complete runs improve both score components relative to the prior
+19.340 s / 194.0049 s fast classical run and 19.7158 s / 197.7789 s
+selected RL run. The normal `driver_params.yaml` still loads the previous RL
+model while residual RL v2 is pending; select `fast_corner_15_params.yaml`
+explicitly to drive the new classical candidate.
+
+A separate map-certified 9.0 m/s *requested top-speed* pilot finished three
+clean laps in 55.5135 s, slower than the 7.0 m/s² corner pilot's 51.9443 s.
+The map guard code and `fast_map_params.yaml` are experimental; the 9.0 m/s
+request is not a measurement of achieved speed. The finite LiDAR horizon
+alone cannot verify stopping from 9 m/s at the measured 2.8 m/s² deceleration.
+The 10 m scan's clear-horizon speed cap is only lifted for a prechecked
+map line and an aligned straight pose; detected obstacles still constrain
+speed. Its on/off behavior needs telemetry analysis before another full run.

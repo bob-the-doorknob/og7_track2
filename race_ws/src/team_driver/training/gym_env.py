@@ -31,7 +31,7 @@ from team_driver.residual_policy import OBSERVATION_DIM, decode_action, pack_obs
 from team_driver.safety import LidarSafety
 from team_driver.speed_controller import SpeedController
 from team_driver.speed_profile import SpeedProfile
-from team_driver.vehicle_limits import load_limits
+from team_driver.vehicle_limits import load_limits, planning_limits
 
 REWARD_WEIGHTS = {
     "progress": 3.0, "cross_track": -0.02, "heading": -0.01,
@@ -60,6 +60,8 @@ class AutoDriveResidualEnv(gym.Env):
         vehicle_ns: str = "/autodrive/roboracer_1",
         centerline_path: str | Path | None = None,
         vehicle_limits_path: str | Path | None = None,
+        planning_lateral_mps2: float = 0.0,
+        planning_top_speed_mps: float = 0.0,
         target_speed: float = 4.4,
         max_lateral_accel: float = 1.5,
         max_braking_decel: float = 2.0,
@@ -91,6 +93,10 @@ class AutoDriveResidualEnv(gym.Env):
                                    "config" / "vehicle_limits.yaml")
         self.vehicle_limits = (load_limits(Path(vehicle_limits_path))
                                if vehicle_limits_path else None)
+        if self.vehicle_limits is not None:
+            self.vehicle_limits = planning_limits(self.vehicle_limits,
+                                                  planning_lateral_mps2,
+                                                  planning_top_speed_mps)
         if self.vehicle_limits is not None:
             self.target_speed = self.vehicle_limits.top_speed_mps
             self.max_lateral_accel = self.vehicle_limits.lateral_mps2
