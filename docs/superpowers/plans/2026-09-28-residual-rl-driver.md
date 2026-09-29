@@ -157,8 +157,9 @@ Implemented in `race_ws/src/team_driver/training/gym_env.py`, with dependency
 pins and setup details in `training/requirements.txt` and `training/README.md`.
 Gymnasium 0.29.1 imports alongside ROS Humble and the image's NumPy 1.21.5
 from the isolated training environment. Live `reset()` and rollout remain to
-be checked with an actual practice simulator; the connected simulator is the
-compete build, so no training reset was sent to it.
+be checked. Training can use the compete build outside scored runs with its
+supplied centreline, or a practice build with a matching centreline. No
+training reset has been sent yet.
 
 ### Task 5: Train, checkpoint, and export the policy
 

@@ -1,9 +1,9 @@
-"""Practice-only Gymnasium wrapper for AutoDRIVE residual steering/speed RL.
+"""Training-only Gymnasium wrapper for AutoDRIVE residual steering/speed RL.
 
 This module is intentionally outside the installed ``team_driver`` package.
 The scored ``driver`` executable never imports it and never publishes reset.
-Run it only with the practice simulator, without a referee or another driver.
-The caller must explicitly declare ``simulator_variant='practice'``; the
+Run it only outside scored evaluations, without a referee or another driver.
+The caller must enable training mode and declare the simulator variant. The
 simulator does not expose its build identity over ROS, so that declaration
 must match the actual executable.
 """
@@ -45,6 +45,7 @@ class AutoDriveResidualEnv(gym.Env):
         self,
         *,
         simulator_variant: str,
+        training_mode: bool = False,
         vehicle_ns: str = "/autodrive/roboracer_1",
         centerline_path: str | Path | None = None,
         target_speed: float = 1.8,
@@ -57,8 +58,10 @@ class AutoDriveResidualEnv(gym.Env):
         off_course_m: float = 0.70,
     ) -> None:
         super().__init__()
-        if simulator_variant != "practice":
-            raise ValueError("training resets require simulator_variant='practice'")
+        if not training_mode:
+            raise ValueError("training resets require training_mode=True")
+        if simulator_variant not in ("practice", "compete"):
+            raise ValueError("simulator_variant must be 'practice' or 'compete'")
         if frame_skip < 1 or max_steps < 1 or episode_laps < 1:
             raise ValueError("frame_skip, max_steps and episode_laps must be positive")
         if not all(math.isfinite(x) and x > 0.0 for x in (
@@ -81,6 +84,8 @@ class AutoDriveResidualEnv(gym.Env):
         )
         self.action_space = gym.spaces.Box(-1.0, 1.0, shape=(2,), dtype=np.float32)
 
+        if simulator_variant == "practice" and centerline_path is None:
+            raise ValueError("practice training needs a matching centerline_path")
         if centerline_path is None:
             centerline_path = (Path(get_package_share_directory("team_driver")) /
                                "maps" / "icra26_compete_centerline.csv")
@@ -161,7 +166,7 @@ class AutoDriveResidualEnv(gym.Env):
     def _guard_practice(self) -> None:
         """Refuse to drive or reset if referee or another driver is present."""
         if any("referee" in name.lower() for name in self.node.get_node_names()):
-            raise RuntimeError("referee detected; practice training must run alone")
+            raise RuntimeError("referee detected; training must run alone")
         if (self.node.count_publishers(self.steering_topic) > 1 or
                 self.node.count_publishers(self.throttle_topic) > 1):
             raise RuntimeError("another driver is publishing commands; stop it first")
@@ -251,7 +256,7 @@ class AutoDriveResidualEnv(gym.Env):
             self._wait_for_frames(1)
             state = self._state()
         else:
-            raise RuntimeError("practice simulator did not confirm reset")
+            raise RuntimeError("simulator did not confirm training reset")
 
         self.speed_controller.reset()
         self.previous_observation = state["observation"].copy()

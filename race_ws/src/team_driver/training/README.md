@@ -1,4 +1,4 @@
-# Practice simulator training environment
+# AutoDRIVE training environment
 
 `gym_env.py` is the Gymnasium environment for Task 4. It subscribes to
 AutoDRIVE LiDAR, odometry, lap count, and collision count, and publishes the
@@ -6,13 +6,14 @@ same steering/throttle topics as the race driver. It reuses the race driver's
 centreline controller, PI speed controller, LiDAR safety, observation packing,
 and residual action limits. `action=[0, 0]` produces the baseline command.
 
-Reset publishing is confined to this file. Instantiate the environment only
-against the **practice** simulator, without the referee or another driver:
+Reset publishing is confined to this file. The wrapper can train against the
+**compete** build outside a scored run, using the supplied compete centreline.
+Stop the manual driver and referee before creating the environment:
 
 ```python
 from training.gym_env import AutoDriveResidualEnv
 
-env = AutoDriveResidualEnv(simulator_variant="practice")
+env = AutoDriveResidualEnv(simulator_variant="compete", training_mode=True)
 try:
     observation, info = env.reset()
     observation, reward, terminated, truncated, info = env.step([0.0, 0.0])
@@ -20,11 +21,13 @@ finally:
     env.close()
 ```
 
-The simulator does not report its build identity over ROS. The
-`simulator_variant="practice"` argument is an explicit declaration by the
-caller; check the actual AutoDRIVE executable before using it. The environment
-also refuses to reset when a referee or another command publisher is visible.
-Never use it for a scored run.
+For the separate practice build, supply
+`simulator_variant="practice", training_mode=True, centerline_path=...` with
+a centreline traced for that build. This repository contains only the compete
+centreline. The simulator does not report its build identity over ROS, so check
+the actual AutoDRIVE executable before choosing the variant. The environment
+refuses to reset when a referee or another command publisher is visible. Never
+use it for a scored run.
 
 ## Install training dependencies
 
@@ -53,7 +56,7 @@ path above with `/hackathon`.
 Task 5 will provide the training loop and an executable smoke run. Until then,
 this module defines the environment contract and can be imported after the
 installation above. `reset()` requires live telemetry from a connected
-practice simulator. `step()` returns Gymnasium's
+simulator. `step()` returns Gymnasium's
 `(observation, reward, terminated, truncated, info)` tuple.
 
 ## Reward and episode end
