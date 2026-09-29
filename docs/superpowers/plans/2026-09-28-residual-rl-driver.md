@@ -179,6 +179,14 @@ episodes without reported collisions. Its exported candidate is in
 `weights/speed_profile_1500_candidate.npz`; deterministic full-run comparison
 is still required before enabling it by default.
 
+The next pre-Task-6 iteration generated a map-constrained racing-line CSV,
+raised the straight-line target to 3.6 m/s, and extended the LiDAR safety
+horizon to 4.5 m in both driver and trainer. The 2,000-step SAC training run
+completed six single-lap exploratory episodes and had one collision episode.
+Its candidate is `weights/racing_line_2000_candidate.npz`. This line is a
+geometric candidate, not a proven minimum-time route; Task 6 must compare
+deterministic compete-build runs before promoting it.
+
 ### Task 6: Compare on the official compete build
 
 **Files:**

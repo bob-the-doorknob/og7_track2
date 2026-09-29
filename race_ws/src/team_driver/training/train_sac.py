@@ -147,9 +147,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--checkpoint-every", type=int, default=2000)
     parser.add_argument("--frame-skip", type=int, default=4)
     parser.add_argument("--max-episode-steps", type=int, default=500)
-    parser.add_argument("--target-speed", type=float, default=3.0)
+    parser.add_argument("--target-speed", type=float, default=3.6)
     parser.add_argument("--max-lateral-accel", type=float, default=1.5)
     parser.add_argument("--max-braking-decel", type=float, default=2.0)
+    parser.add_argument("--safety-horizon", type=float, default=4.5)
     parser.add_argument("--output-dir", type=Path, default=Path("training/runs"))
     parser.add_argument("--run-id", help="directory name; defaults to UTC time and seed")
     args = parser.parse_args()
@@ -160,7 +161,8 @@ def parse_args() -> argparse.Namespace:
     if args.frame_skip < 1 or args.max_episode_steps < 1:
         parser.error("frame-skip and max-episode-steps must be positive")
     if not all(np.isfinite(value) and value > 0.0 for value in (
-            args.target_speed, args.max_lateral_accel, args.max_braking_decel)):
+            args.target_speed, args.max_lateral_accel, args.max_braking_decel,
+            args.safety_horizon)):
         parser.error("speed and acceleration limits must be finite and positive")
     if args.simulator_variant == "practice" and args.centerline is None:
         parser.error("practice training needs --centerline for the practice map")
@@ -177,13 +179,14 @@ def main() -> None:
     settings = {
         "seed": args.seed, "simulator_variant": args.simulator_variant,
         "simulator_build": args.simulator_build,
-        "centerline": str(args.centerline.resolve()) if args.centerline else "packaged compete",
+        "centerline": str(args.centerline.resolve()) if args.centerline else "packaged compete racing line",
         "requested_steps": args.steps, "baseline_steps": args.baseline_steps,
         "checkpoint_every": args.checkpoint_every, "frame_skip": args.frame_skip,
         "max_episode_steps": args.max_episode_steps,
         "target_speed": args.target_speed,
         "max_lateral_accel": args.max_lateral_accel,
         "max_braking_decel": args.max_braking_decel,
+        "safety_horizon": args.safety_horizon,
         "algorithm": "SAC", "actor_layers": [24, 64, 64, 2],
         "run_started_utc": datetime.now(timezone.utc).isoformat(),
     }
@@ -196,6 +199,7 @@ def main() -> None:
             max_steps=args.max_episode_steps, target_speed=args.target_speed,
             max_lateral_accel=args.max_lateral_accel,
             max_braking_decel=args.max_braking_decel,
+            safety_horizon=args.safety_horizon,
         )
         model = ZeroStartSAC(
             "MlpPolicy", env, policy_kwargs={"net_arch": {"pi": [64, 64], "qf": [64, 64]}},

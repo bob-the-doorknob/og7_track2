@@ -58,9 +58,10 @@ class AutoDriveResidualEnv(gym.Env):
         training_mode: bool = False,
         vehicle_ns: str = "/autodrive/roboracer_1",
         centerline_path: str | Path | None = None,
-        target_speed: float = 3.0,
+        target_speed: float = 3.6,
         max_lateral_accel: float = 1.5,
         max_braking_decel: float = 2.0,
+        safety_horizon: float = 4.5,
         max_range: float = 10.0,
         frame_skip: int = 4,
         max_steps: int = 500,
@@ -76,13 +77,15 @@ class AutoDriveResidualEnv(gym.Env):
         if frame_skip < 1 or max_steps < 1 or episode_laps < 1:
             raise ValueError("frame_skip, max_steps and episode_laps must be positive")
         if not all(math.isfinite(x) and x > 0.0 for x in (
-                target_speed, max_lateral_accel, max_braking_decel, max_range,
+                target_speed, max_lateral_accel, max_braking_decel,
+                safety_horizon, max_range,
                 sensor_timeout_s, off_course_m)):
             raise ValueError("training speed, limits and timeout must be finite and positive")
 
         self.target_speed = float(target_speed)
         self.max_lateral_accel = float(max_lateral_accel)
         self.max_braking_decel = float(max_braking_decel)
+        self.safety_horizon = float(safety_horizon)
         self.max_range = float(max_range)
         self.frame_skip = int(frame_skip)
         self.max_steps = int(max_steps)
@@ -100,7 +103,7 @@ class AutoDriveResidualEnv(gym.Env):
             raise ValueError("practice training needs a matching centerline_path")
         if centerline_path is None:
             centerline_path = (Path(get_package_share_directory("team_driver")) /
-                               "maps" / "icra26_compete_centerline.csv")
+                               "maps" / "icra26_compete_racing_line.csv")
         self.controller = PurePursuit(centerline_path)
         self.speed_profile = SpeedProfile(
             self.controller, straight_speed=self.target_speed,
@@ -108,6 +111,7 @@ class AutoDriveResidualEnv(gym.Env):
             max_braking_decel=self.max_braking_decel,
         )
         self.safety = LidarSafety(max_range=self.max_range,
+                                  horizon=self.safety_horizon,
                                   max_steering_rad=MAX_STEERING_RAD)
         self.speed_controller = SpeedController()
 

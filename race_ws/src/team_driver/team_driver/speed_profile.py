@@ -15,7 +15,7 @@ class SpeedProfile:
     def __init__(
         self,
         path: PurePursuit,
-        straight_speed: float = 3.0,
+        straight_speed: float = 3.6,
         max_lateral_accel: float = 1.5,
         max_braking_decel: float = 2.0,
         sample_spacing: float = 0.20,

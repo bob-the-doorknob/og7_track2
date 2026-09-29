@@ -53,7 +53,7 @@ class Driver(Node):
         self.declare_parameter('max_range', 10.0)         # [m] clip the scan here
 
         self.declare_parameter('centerline_path', '')
-        self.declare_parameter('target_speed', 3.0)
+        self.declare_parameter('target_speed', 3.6)
         self.declare_parameter('max_lateral_accel', 1.5)
         self.declare_parameter('max_braking_decel', 2.0)
         self.declare_parameter('wheelbase', 0.324)
@@ -69,7 +69,7 @@ class Driver(Node):
         self.declare_parameter('safety_side_margin', 0.08)
         self.declare_parameter('safety_stop_margin', 0.25)
         self.declare_parameter('safety_max_deceleration', 2.0)
-        self.declare_parameter('safety_horizon', 3.0)
+        self.declare_parameter('safety_horizon', 4.5)
 
         self.max_range = float(self.get_parameter('max_range').value)
         self.target_speed = max(float(self.get_parameter('target_speed').value), 0.0)
@@ -84,10 +84,10 @@ class Driver(Node):
         else:
             try:
                 centerline_path = Path(get_package_share_directory('team_driver')) \
-                    / 'maps' / 'icra26_compete_centerline.csv'
+                    / 'maps' / 'icra26_compete_racing_line.csv'
             except Exception:
                 centerline_path = Path(__file__).resolve().parents[4] / 'maps' \
-                    / 'icra26_compete_centerline.csv'
+                    / 'icra26_compete_racing_line.csv'
 
         self.controller = PurePursuit(
             centerline_path=centerline_path,
