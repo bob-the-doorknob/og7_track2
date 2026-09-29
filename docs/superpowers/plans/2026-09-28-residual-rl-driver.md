@@ -147,11 +147,18 @@ and a 58.625 s total. This validates the policy path, not learned performance.
 - Create: `race_ws/src/team_driver/training/requirements.txt`
 - Do not modify: `race_ws/src/team_driver/team_driver/driver.py` to add reset publishing.
 
-- [ ] Wrap the simulator sensors, odometry, and collision telemetry as a Gymnasium observation/reward interface.
-- [ ] Keep all reset-topic publishing inside this training-only module and use it only for practice/training episodes, never a scored run.
-- [ ] Reward forward progress; penalize cross-track and heading error, unsafe speed, abrupt action changes, contact, and leaving the course. End unsafe episodes promptly.
-- [ ] Start the policy at zero residual so the initial behavior equals the measured baseline.
-- [ ] Pin compatible training dependencies separately. Do not override the image's NumPy or websocket package pins.
+- [x] Wrap the simulator sensors, odometry, and collision telemetry as a Gymnasium observation/reward interface.
+- [x] Keep all reset-topic publishing inside this training-only module and use it only for practice/training episodes, never a scored run.
+- [x] Reward forward progress; penalize cross-track and heading error, unsafe speed, abrupt action changes, contact, and leaving the course. End unsafe episodes promptly.
+- [x] Start the policy at zero residual so the initial behavior equals the measured baseline.
+- [x] Pin compatible training dependencies separately. Do not override the image's NumPy or websocket package pins.
+
+Implemented in `race_ws/src/team_driver/training/gym_env.py`, with dependency
+pins and setup details in `training/requirements.txt` and `training/README.md`.
+Gymnasium 0.29.1 imports alongside ROS Humble and the image's NumPy 1.21.5
+from the isolated training environment. Live `reset()` and rollout remain to
+be checked with an actual practice simulator; the connected simulator is the
+compete build, so no training reset was sent to it.
 
 ### Task 5: Train, checkpoint, and export the policy
 

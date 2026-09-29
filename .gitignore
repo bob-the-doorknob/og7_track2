@@ -8,6 +8,7 @@
 # --- Python ---
 __pycache__/
 *.py[cod]
+race_ws/src/team_driver/training/.venv/
 *.egg-info/
 .pytest_cache/
 
