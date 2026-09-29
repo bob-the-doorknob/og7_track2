@@ -5,12 +5,12 @@ AutoDRIVE LiDAR, odometry, lap count, and collision count, and publishes the
 same steering/throttle topics as the race driver. It reuses the race driver's
 centreline controller, PI speed controller, LiDAR safety, observation packing,
 speed profile, and residual action limits. `action=[0, 0]` produces the
-baseline command. The current speed profile permits up to 3.6 m/s on straights and
+baseline command. The current speed profile targets up to 4.4 m/s on straights and
 plans braking before bends using curvature and a 2.0 m/s² deceleration limit.
 It follows the generated racing line rather than the original centreline.
 
 Reset publishing is confined to this file. The wrapper can train against the
-**compete** build outside a scored run, using the supplied compete centreline.
+**compete** build outside a scored run, using the supplied compete racing line.
 Stop the manual driver and referee before creating the environment:
 
 ```python
@@ -26,8 +26,8 @@ finally:
 
 For the separate practice build, supply
 `simulator_variant="practice", training_mode=True, centerline_path=...` with
-a centreline traced for that build. This repository contains only the compete
-centreline. The simulator does not report its build identity over ROS, so check
+a path traced for that build. This repository contains only compete-build
+paths. The simulator does not report its build identity over ROS, so check
 the actual AutoDRIVE executable before choosing the variant. The environment
 refuses to reset when a referee or another command publisher is visible. Never
 use it for a scored run.
@@ -77,8 +77,8 @@ In the container shell, from the `team_driver` source directory shown above:
   --simulator-variant compete \
   --simulator-build 'AutoDRIVE compete executable (verify version locally)' \
   --steps 20000 --baseline-steps 500 --checkpoint-every 2000 \
-  --seed 42 --target-speed 3.6 --max-lateral-accel 1.5 \
-  --max-braking-decel 2.0 --safety-horizon 4.5
+  --seed 43 --target-speed 4.4 --max-lateral-accel 1.5 \
+  --max-braking-decel 2.0 --safety-horizon 5.5
 ```
 
 For the practice build, change `--simulator-variant practice` and add
@@ -92,12 +92,13 @@ The JSON stores the seed, declared simulator build, reward weights, elapsed
 time, speed profile settings, and step count. The `.zip` retains the full SAC trainer; `.npz` is the
 small NumPy actor used by the race driver. Run outputs are gitignored. The
 checked-in `weights/baseline_residual.npz` is the zero-residual fallback.
-Task 6 must compare a candidate against the baseline before selecting it for
-`weights/residual_policy.npz` and changing `baseline_only` in the driver config.
+The selected 4.4 m/s actor is `weights/residual_policy.npz`, loaded by the
+default driver configuration. `config/baseline_44_params.yaml` retains the
+classical baseline for comparison.
 The earlier `task5_first_1000` checkpoint used a 1.8 m/s centreline baseline.
 The `task5_speed_profile_1500b` checkpoint used a 3.0 m/s centreline profile.
-Both need replacing for the 3.6 m/s racing line: the observation format stays
-v1, but the input distribution and control decisions change.
+Those checkpoints were superseded as the line and speed plan changed. The
+observation format stays v1, but the input distribution and controls differ.
 
 The first faster-profile run is `task5_speed_profile_1500b` (seed 42,
 1,500 steps). Its exported actor and metadata are checked in as
@@ -109,7 +110,7 @@ with `--ros-args --params-file ... -p baseline_only:=false` and set
 `-p policy_path:=/hackathon/.worktrees/task1-residual-rl-baseline/race_ws/src/team_driver/weights/speed_profile_1500_candidate.npz`.
 Stop the training environment first; only one driver may publish commands.
 That candidate was trained on the prior 3.0 m/s centreline profile. Do not
-use those old weights as a measure of the new 3.6 m/s racing line.
+use those old weights as a measure of the new 4.4 m/s racing line.
 
 The new run is `task5_racing_line_2000` (seed 42, 2,000 steps). Its exported
 actor and metadata are checked in as `weights/racing_line_2000_candidate.npz`
@@ -120,6 +121,14 @@ or scored runs. To try the candidate with the normal driver, use
 `-p policy_path:=/hackathon/.worktrees/task1-residual-rl-baseline/race_ws/src/team_driver/weights/racing_line_2000_candidate.npz`.
 Check the terminal for `Loaded residual policy`; a missing or mistyped path
 causes the driver to fall back to the baseline.
+
+The selected run is `task5_racing_line_44_2500b` (seed 43, 2,500 steps) with
+the 4.4 m/s target and 5.5 m LiDAR horizon. Its exported actor and metadata
+are checked in as `weights/racing_line_44_2500_candidate.npz` and `.json`;
+the chosen copy is `weights/residual_policy.npz`. Training episodes included
+exploration and one collision. The deterministic scored comparison is in
+`docs/track2-44-comparison.md`; its selected-policy runs completed without
+collisions and were faster than the baseline runs.
 
 ## Reward and episode end
 

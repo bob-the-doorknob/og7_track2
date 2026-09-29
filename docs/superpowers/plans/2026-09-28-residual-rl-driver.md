@@ -134,8 +134,8 @@ Completed safety comparison on 2026-09-29: `results/task2_safety__task2_safety_2
 
 Implemented in `team_driver/residual_policy.py` as observation/model format v1.
 The trainer in Task 4/5 should import `pack_observation` and `decode_action`
-directly. Keep `baseline_only: true` until a learned model beats the classical
-controller. A zero-weight policy completed a two-lap compete-build integration
+directly. The driver kept `baseline_only: true` until the 4.4 m/s learned
+model beat the classical controller in scored comparison runs. A zero-weight policy completed a two-lap compete-build integration
 run on 2026-09-29: `results/task3_zero__task3_zero_20260929.json` reports
 `COMPLETE`, `scored: true`, 2/2 laps, zero collisions, zero callback errors,
 and a 58.625 s total. This validates the policy path, not learned performance.
@@ -191,13 +191,15 @@ deterministic compete-build runs before promoting it.
 
 **Files:**
 - Modify: `race_ws/src/team_driver/team_driver/driver.py`
-- Record: `results/` during evaluation; promote required final runs to `results/submitted/` only at submission time.
+- Record: `results/` during evaluation; preserve unedited comparison and selected runs in `results/submitted/`.
 
-- [ ] Compare baseline-only and baseline-plus-policy using the same compete build and evaluation settings.
-- [ ] Use multiple complete runs; compare collision count, best lap after penalties, and 10-lap total after penalties.
-- [ ] Keep RL only when it improves the measured result without making completion or collision reliability materially worse.
-- [ ] Check policy inference is bounded and the 40 Hz loop keeps up.
-- [ ] Leave the classical fallback as the selectable default if RL has not earned promotion.
+- [x] Compare baseline-only and baseline-plus-policy using the same compete build and evaluation settings.
+- [x] Use multiple complete runs; compare collision count, best lap after penalties, and 10-lap total after penalties.
+- [x] Select RL after it improved the measured result with zero collisions in every scored comparison run.
+- [x] Check bounded NumPy inference and observe a steering command stream above 40 Hz during a scored run.
+- [x] Keep the classical fallback selectable with `config/baseline_44_params.yaml`; the scored RL actor is now the default.
+
+Results and practical limits are recorded in `docs/track2-44-comparison.md`.
 
 ### Task 7: Prepare and submit the entry
 

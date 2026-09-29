@@ -9,6 +9,7 @@ from pathlib import Path
 import numpy as np
 from ament_index_python.packages import get_package_share_directory
 import rclpy
+from rclpy.signals import SignalHandlerOptions
 from geometry_msgs.msg import Point
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
@@ -53,7 +54,7 @@ class Driver(Node):
         self.declare_parameter('max_range', 10.0)         # [m] clip the scan here
 
         self.declare_parameter('centerline_path', '')
-        self.declare_parameter('target_speed', 3.6)
+        self.declare_parameter('target_speed', 4.4)
         self.declare_parameter('max_lateral_accel', 1.5)
         self.declare_parameter('max_braking_decel', 2.0)
         self.declare_parameter('wheelbase', 0.324)
@@ -69,7 +70,7 @@ class Driver(Node):
         self.declare_parameter('safety_side_margin', 0.08)
         self.declare_parameter('safety_stop_margin', 0.25)
         self.declare_parameter('safety_max_deceleration', 2.0)
-        self.declare_parameter('safety_horizon', 4.5)
+        self.declare_parameter('safety_horizon', 5.5)
 
         self.max_range = float(self.get_parameter('max_range').value)
         self.target_speed = max(float(self.get_parameter('target_speed').value), 0.0)
@@ -299,13 +300,21 @@ class Driver(Node):
 
 
 def main(args=None):
-    rclpy.init(args=args)
+    # Keep the ROS context alive through SIGINT so the final neutral command
+    # can reach the bridge before the publishers are destroyed.
+    rclpy.init(args=args, signal_handler_options=SignalHandlerOptions.NO)
     node = Driver()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
         pass
     finally:
+        # The bridge retains the most recent command after this node exits.
+        # Send neutral controls before destroying the publishers so the car
+        # does not keep accelerating between practice or scored runs.
+        if rclpy.ok():
+            node.publish(0.0, 0.0)
+            time.sleep(0.10)
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()

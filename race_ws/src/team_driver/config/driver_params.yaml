@@ -4,7 +4,7 @@ driver:
     vehicle_ns: /autodrive/roboracer_1
     max_range: 10.0
     centerline_path: ""           # empty uses packaged racing line; set centerline CSV to revert
-    target_speed: 3.6             # [m/s] straight-line ceiling; profile slows for bends
+    target_speed: 4.4             # [m/s] straight-line target; profile slows for bends
     max_lateral_accel: 1.5        # [m/s^2], reduces speed in tighter turns
     max_braking_decel: 2.0        # [m/s^2], plans braking before each bend
     wheelbase: 0.324              # [m]
@@ -14,10 +14,10 @@ driver:
     speed_ff_gain: 0.16
     speed_kp: 0.24
     speed_ki: 0.08
-    baseline_only: true
-    policy_path: ""               # .npz path; used only when baseline_only is false
+    baseline_only: false          # 4.4 m/s RL actor selected after scored comparison
+    policy_path: ""               # empty uses packaged weights/residual_policy.npz
     safety_enabled: true
     safety_side_margin: 0.08      # [m] added to the 0.135 m car half-width
     safety_stop_margin: 0.25      # [m] bumper and uncertainty allowance
     safety_max_deceleration: 2.0  # [m/s^2] conservative braking limit
-    safety_horizon: 4.5           # [m] scanned path length, supports faster straights
+    safety_horizon: 5.5           # [m] scanned path length, supports faster straights

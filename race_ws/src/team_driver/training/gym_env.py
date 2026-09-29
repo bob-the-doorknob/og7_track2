@@ -58,10 +58,10 @@ class AutoDriveResidualEnv(gym.Env):
         training_mode: bool = False,
         vehicle_ns: str = "/autodrive/roboracer_1",
         centerline_path: str | Path | None = None,
-        target_speed: float = 3.6,
+        target_speed: float = 4.4,
         max_lateral_accel: float = 1.5,
         max_braking_decel: float = 2.0,
-        safety_horizon: float = 4.5,
+        safety_horizon: float = 5.5,
         max_range: float = 10.0,
         frame_skip: int = 4,
         max_steps: int = 500,
@@ -265,12 +265,19 @@ class AutoDriveResidualEnv(gym.Env):
         self._guard_practice()
         self.done = True
         self._publish(0.0, 0.0)
-        self.reset_pub.publish(Bool(data=True))
+        # Match the referee's reset hold/settle timing. A single-frame pulse
+        # can be lost by the websocket bridge, especially after a long drive.
         try:
-            self._wait_for_frames(1)
+            deadline = time.monotonic() + 0.5
+            while time.monotonic() < deadline:
+                self.reset_pub.publish(Bool(data=True))
+                self.executor.spin_once(timeout_sec=0.05)
         finally:
-            # AutoDRIVE's reset is level-triggered: always release it.
-            self.reset_pub.publish(Bool(data=False))
+            # AutoDRIVE's reset is level-triggered: hold low through settling.
+            deadline = time.monotonic() + 1.0
+            while time.monotonic() < deadline:
+                self.reset_pub.publish(Bool(data=False))
+                self.executor.spin_once(timeout_sec=0.05)
 
         self._wait_for_frames(2)
         state = self._state()
@@ -281,7 +288,11 @@ class AutoDriveResidualEnv(gym.Env):
             self._wait_for_frames(1)
             state = self._state()
         else:
-            raise RuntimeError("simulator did not confirm training reset")
+            raise RuntimeError(
+                "simulator did not confirm training reset "
+                f"(laps={state['lap_count']}, collisions={state['collision_count']}, "
+                f"speed={state['speed']:.2f} m/s)"
+            )
 
         self.speed_controller.reset()
         self.previous_observation = state["observation"].copy()
