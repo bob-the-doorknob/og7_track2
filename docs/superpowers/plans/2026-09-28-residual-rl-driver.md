@@ -172,6 +172,13 @@ training reset has been sent yet.
 - [x] Export the actor to the simple weight format consumed by `residual_policy.py`; the race driver does not require PyTorch inference.
 - [x] Keep a zero-residual baseline checkpoint in `weights/baseline_residual.npz`. Candidate selection and full-run comparison remain Task 6.
 
+Before Task 6, the baseline gained a 3.0 m/s straight-line ceiling and a
+closed-track curvature/braking speed profile shared by `driver.py` and
+`gym_env.py`. A fresh 1,500-step SAC run completed five single-lap training
+episodes without reported collisions. Its exported candidate is in
+`weights/speed_profile_1500_candidate.npz`; deterministic full-run comparison
+is still required before enabling it by default.
+
 ### Task 6: Compare on the official compete build
 
 **Files:**

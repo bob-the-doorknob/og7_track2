@@ -147,6 +147,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--checkpoint-every", type=int, default=2000)
     parser.add_argument("--frame-skip", type=int, default=4)
     parser.add_argument("--max-episode-steps", type=int, default=500)
+    parser.add_argument("--target-speed", type=float, default=3.0)
+    parser.add_argument("--max-lateral-accel", type=float, default=1.5)
+    parser.add_argument("--max-braking-decel", type=float, default=2.0)
     parser.add_argument("--output-dir", type=Path, default=Path("training/runs"))
     parser.add_argument("--run-id", help="directory name; defaults to UTC time and seed")
     args = parser.parse_args()
@@ -156,6 +159,9 @@ def parse_args() -> argparse.Namespace:
         parser.error("baseline-steps must be less than total steps")
     if args.frame_skip < 1 or args.max_episode_steps < 1:
         parser.error("frame-skip and max-episode-steps must be positive")
+    if not all(np.isfinite(value) and value > 0.0 for value in (
+            args.target_speed, args.max_lateral_accel, args.max_braking_decel)):
+        parser.error("speed and acceleration limits must be finite and positive")
     if args.simulator_variant == "practice" and args.centerline is None:
         parser.error("practice training needs --centerline for the practice map")
     return args
@@ -175,6 +181,9 @@ def main() -> None:
         "requested_steps": args.steps, "baseline_steps": args.baseline_steps,
         "checkpoint_every": args.checkpoint_every, "frame_skip": args.frame_skip,
         "max_episode_steps": args.max_episode_steps,
+        "target_speed": args.target_speed,
+        "max_lateral_accel": args.max_lateral_accel,
+        "max_braking_decel": args.max_braking_decel,
         "algorithm": "SAC", "actor_layers": [24, 64, 64, 2],
         "run_started_utc": datetime.now(timezone.utc).isoformat(),
     }
@@ -184,7 +193,9 @@ def main() -> None:
         env = AutoDriveResidualEnv(
             simulator_variant=args.simulator_variant, training_mode=args.training_mode,
             centerline_path=args.centerline, frame_skip=args.frame_skip,
-            max_steps=args.max_episode_steps,
+            max_steps=args.max_episode_steps, target_speed=args.target_speed,
+            max_lateral_accel=args.max_lateral_accel,
+            max_braking_decel=args.max_braking_decel,
         )
         model = ZeroStartSAC(
             "MlpPolicy", env, policy_kwargs={"net_arch": {"pi": [64, 64], "qf": [64, 64]}},

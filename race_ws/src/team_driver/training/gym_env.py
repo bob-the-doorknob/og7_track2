@@ -30,6 +30,7 @@ from team_driver.pure_pursuit import PurePursuit
 from team_driver.residual_policy import OBSERVATION_DIM, decode_action, pack_observation
 from team_driver.safety import LidarSafety
 from team_driver.speed_controller import SpeedController
+from team_driver.speed_profile import SpeedProfile
 
 REWARD_WEIGHTS = {
     "progress": 3.0, "cross_track": -0.02, "heading": -0.01,
@@ -57,8 +58,9 @@ class AutoDriveResidualEnv(gym.Env):
         training_mode: bool = False,
         vehicle_ns: str = "/autodrive/roboracer_1",
         centerline_path: str | Path | None = None,
-        target_speed: float = 1.8,
+        target_speed: float = 3.0,
         max_lateral_accel: float = 1.5,
+        max_braking_decel: float = 2.0,
         max_range: float = 10.0,
         frame_skip: int = 4,
         max_steps: int = 500,
@@ -74,12 +76,13 @@ class AutoDriveResidualEnv(gym.Env):
         if frame_skip < 1 or max_steps < 1 or episode_laps < 1:
             raise ValueError("frame_skip, max_steps and episode_laps must be positive")
         if not all(math.isfinite(x) and x > 0.0 for x in (
-                target_speed, max_lateral_accel, max_range,
+                target_speed, max_lateral_accel, max_braking_decel, max_range,
                 sensor_timeout_s, off_course_m)):
             raise ValueError("training speed, limits and timeout must be finite and positive")
 
         self.target_speed = float(target_speed)
         self.max_lateral_accel = float(max_lateral_accel)
+        self.max_braking_decel = float(max_braking_decel)
         self.max_range = float(max_range)
         self.frame_skip = int(frame_skip)
         self.max_steps = int(max_steps)
@@ -99,6 +102,11 @@ class AutoDriveResidualEnv(gym.Env):
             centerline_path = (Path(get_package_share_directory("team_driver")) /
                                "maps" / "icra26_compete_centerline.csv")
         self.controller = PurePursuit(centerline_path)
+        self.speed_profile = SpeedProfile(
+            self.controller, straight_speed=self.target_speed,
+            max_lateral_accel=self.max_lateral_accel,
+            max_braking_decel=self.max_braking_decel,
+        )
         self.safety = LidarSafety(max_range=self.max_range,
                                   max_steering_rad=MAX_STEERING_RAD)
         self.speed_controller = SpeedController()
@@ -206,7 +214,7 @@ class AutoDriveResidualEnv(gym.Env):
         baseline_steering, _, curvature = self.controller.command(
             self.position, self.yaw, self.speed)
         baseline_speed = min(
-            self.target_speed,
+            self.speed_profile.target_speed(self.position),
             math.sqrt(self.max_lateral_accel / max(abs(curvature), 1e-4)),
         )
         observation = pack_observation(

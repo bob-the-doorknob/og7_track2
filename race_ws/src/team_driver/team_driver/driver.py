@@ -22,6 +22,7 @@ from team_driver.pure_pursuit import PurePursuit
 from team_driver.residual_policy import ResidualPolicy, pack_observation
 from team_driver.safety import LidarSafety
 from team_driver.speed_controller import SpeedController
+from team_driver.speed_profile import SpeedProfile
 
 # The steering command is normalised; this is what +-1.0 actually means.
 MAX_STEERING_RAD = 0.5236
@@ -52,8 +53,9 @@ class Driver(Node):
         self.declare_parameter('max_range', 10.0)         # [m] clip the scan here
 
         self.declare_parameter('centerline_path', '')
-        self.declare_parameter('target_speed', 1.8)
+        self.declare_parameter('target_speed', 3.0)
         self.declare_parameter('max_lateral_accel', 1.5)
+        self.declare_parameter('max_braking_decel', 2.0)
         self.declare_parameter('wheelbase', 0.324)
         self.declare_parameter('lookahead_min', 0.55)
         self.declare_parameter('lookahead_max', 1.8)
@@ -96,6 +98,11 @@ class Driver(Node):
             lookahead_speed_gain=float(
                 self.get_parameter('lookahead_speed_gain').value
             ),
+        )
+        self.speed_profile = SpeedProfile(
+            self.controller, straight_speed=self.target_speed,
+            max_lateral_accel=self.max_lateral_accel,
+            max_braking_decel=float(self.get_parameter('max_braking_decel').value),
         )
         self.speed_controller = SpeedController(
             feedforward_gain=float(self.get_parameter('speed_ff_gain').value),
@@ -226,7 +233,7 @@ class Driver(Node):
         curve_speed = math.sqrt(
             self.max_lateral_accel / max(abs(curvature), 1e-4)
         )
-        target_speed = min(self.target_speed, curve_speed)
+        target_speed = min(self.speed_profile.target_speed(self.position), curve_speed)
         baseline_steering = steering
         baseline_target_speed = target_speed
         if self.policy is not None:

@@ -4,7 +4,9 @@
 AutoDRIVE LiDAR, odometry, lap count, and collision count, and publishes the
 same steering/throttle topics as the race driver. It reuses the race driver's
 centreline controller, PI speed controller, LiDAR safety, observation packing,
-and residual action limits. `action=[0, 0]` produces the baseline command.
+speed profile, and residual action limits. `action=[0, 0]` produces the
+baseline command. The speed profile permits up to 3.0 m/s on straights and
+plans braking before bends using curvature and a 2.0 m/s² deceleration limit.
 
 Reset publishing is confined to this file. The wrapper can train against the
 **compete** build outside a scored run, using the supplied compete centreline.
@@ -74,7 +76,8 @@ In the container shell, from the `team_driver` source directory shown above:
   --simulator-variant compete \
   --simulator-build 'AutoDRIVE compete executable (verify version locally)' \
   --steps 20000 --baseline-steps 500 --checkpoint-every 2000 \
-  --seed 42
+  --seed 42 --target-speed 3.0 --max-lateral-accel 1.5 \
+  --max-braking-decel 2.0
 ```
 
 For the practice build, change `--simulator-variant practice` and add
@@ -85,11 +88,24 @@ Training explicitly enables resets and must never run during a scored race.
 `training/runs/<run-id>/` contains `baseline.zip/.npz/.json`, periodic
 `step_*.zip/.npz/.json`, `final.zip/.npz/.json`, and `episodes.jsonl`.
 The JSON stores the seed, declared simulator build, reward weights, elapsed
-time, and step count. The `.zip` retains the full SAC trainer; `.npz` is the
+time, speed profile settings, and step count. The `.zip` retains the full SAC trainer; `.npz` is the
 small NumPy actor used by the race driver. Run outputs are gitignored. The
 checked-in `weights/baseline_residual.npz` is the zero-residual fallback.
 Task 6 must compare a candidate against the baseline before selecting it for
 `weights/residual_policy.npz` and changing `baseline_only` in the driver config.
+The earlier `task5_first_1000` checkpoint was trained around a 1.8 m/s
+baseline. Retrain for this 3.0 m/s profile; the observation format remains v1,
+but the input distribution and control decisions have changed.
+
+The first faster-profile run is `task5_speed_profile_1500b` (seed 42,
+1,500 steps). Its exported actor and metadata are checked in as
+`weights/speed_profile_1500_candidate.npz` and `.json`. It completed five
+single-lap training episodes with zero reported collisions. Those episodes
+include exploration and are not a deterministic evaluation of this actor.
+To watch the candidate outside a scored run, use the normal bridge and driver
+with `--ros-args --params-file ... -p baseline_only:=false` and set
+`-p policy_path:=/hackathon/.worktrees/task1-residual-rl-baseline/race_ws/src/team_driver/weights/speed_profile_1500_candidate.npz`.
+Stop the training environment first; only one driver may publish commands.
 
 ## Reward and episode end
 

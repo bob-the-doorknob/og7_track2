@@ -4,8 +4,9 @@ driver:
     vehicle_ns: /autodrive/roboracer_1
     max_range: 10.0
     centerline_path: ""
-    target_speed: 1.8             # [m/s], lower this if the car leaves the line
+    target_speed: 3.0             # [m/s] straight-line ceiling; profile slows for bends
     max_lateral_accel: 1.5        # [m/s^2], reduces speed in tighter turns
+    max_braking_decel: 2.0        # [m/s^2], plans braking before each bend
     wheelbase: 0.324              # [m]
     lookahead_min: 0.55            # [m]
     lookahead_max: 1.8             # [m]

@@ -1,0 +1,43 @@
+{
+  "actor_layers": [
+    24,
+    64,
+    64,
+    2
+  ],
+  "algorithm": "SAC",
+  "baseline_steps": 250,
+  "centerline": "packaged compete",
+  "checkpoint": "final",
+  "checkpoint_every": 375,
+  "duration_s": 163.045,
+  "episodes_completed": 5,
+  "frame_skip": 4,
+  "max_braking_decel": 2.0,
+  "max_episode_steps": 500,
+  "max_lateral_accel": 1.5,
+  "observation_version": 1,
+  "requested_steps": 1500,
+  "reward_weights": {
+    "action_change": -0.03,
+    "collision": -10.0,
+    "cross_track": -0.02,
+    "heading": -0.01,
+    "lap_complete": 5.0,
+    "off_course": -6.0,
+    "progress": 3.0,
+    "rejected": -0.1,
+    "sensor_failure": -2.0,
+    "unsafe_speed": -0.04
+  },
+  "run_started_utc": "2026-09-29T05:55:05.657526+00:00",
+  "runtime_format_version": 1,
+  "saved_at_utc": "2026-09-29T05:57:50.035792+00:00",
+  "seed": 42,
+  "simulator_build": "AutoDRIVE-compete-user-declared",
+  "simulator_variant": "compete",
+  "stable_baselines3_version": "2.3.2",
+  "steps": 1500,
+  "target_speed": 3.0,
+  "torch_version": "2.3.1+cpu"
+}
