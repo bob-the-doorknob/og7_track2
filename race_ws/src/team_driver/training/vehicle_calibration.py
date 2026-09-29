@@ -71,9 +71,9 @@ def estimate_limits(rows: np.ndarray) -> VehicleLimits:
         top_speed_mps=float(np.max(col["speed_mps"])),
         accel_mps2=float(np.quantile(accel, 0.20)),
         brake_mps2=float(np.quantile(brake, 0.20)),
-        # High clean corner loads show what the vehicle already sustained.
-        # Reserve 20% rather than mistaking gentle corners for a grip limit.
-        lateral_mps2=float(0.8 * np.quantile(lateral, 0.90)),
+        # Upper clean corner loads show what the vehicle already sustained.
+        # Ignore the noisiest 1% and reserve 5% for planning uncertainty.
+        lateral_mps2=float(0.95 * np.quantile(lateral, 0.99)),
         control_delay_s=delay,
     )
 

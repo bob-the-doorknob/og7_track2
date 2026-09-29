@@ -36,7 +36,7 @@ def test_estimate_limits_uses_measured_speed_and_braking():
     assert limits.top_speed_mps == pytest.approx(3.0)
     assert limits.accel_mps2 == pytest.approx(1.0)
     assert limits.brake_mps2 == pytest.approx(1.0)
-    assert limits.lateral_mps2 == pytest.approx(0.8)
+    assert limits.lateral_mps2 == pytest.approx(0.95)
     assert limits.control_delay_s >= 0.0
 
 

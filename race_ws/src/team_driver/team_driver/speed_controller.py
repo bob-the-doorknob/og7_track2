@@ -14,6 +14,7 @@ class SpeedController:
         integral_limit: float = 2.0,
         throttle_min: float = -0.12,
         throttle_max: float = 0.65,
+        active_braking: bool = False,
     ) -> None:
         self.feedforward_gain = max(float(feedforward_gain), 0.0)
         self.kp = max(float(kp), 0.0)
@@ -21,6 +22,7 @@ class SpeedController:
         self.integral_limit = max(float(integral_limit), 0.0)
         self.throttle_min = min(float(throttle_min), 0.0)
         self.throttle_max = max(float(throttle_max), 0.0)
+        self.active_braking = bool(active_braking)
         self.integral = 0.0
 
     def reset(self) -> None:
@@ -39,6 +41,9 @@ class SpeedController:
         speed = max(float(speed), 0.0)
         dt = min(max(float(dt), 0.0), 0.2)
         error = target_speed - speed
+        if self.active_braking and error < -0.05:
+            self.integral = min(self.integral, 0.0)
+            return max(self.throttle_min, -0.30 * (speed - target_speed))
         if dt > 0.0:
             self.integral = min(
                 max(self.integral + error * dt, -self.integral_limit),

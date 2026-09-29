@@ -24,6 +24,7 @@ from team_driver.residual_policy import ResidualPolicy, pack_observation
 from team_driver.safety import LidarSafety
 from team_driver.speed_controller import SpeedController
 from team_driver.speed_profile import SpeedProfile
+from team_driver.vehicle_limits import load_limits
 
 # The steering command is normalised; this is what +-1.0 actually means.
 MAX_STEERING_RAD = 0.5236
@@ -57,6 +58,7 @@ class Driver(Node):
         self.declare_parameter('target_speed', 4.4)
         self.declare_parameter('max_lateral_accel', 1.5)
         self.declare_parameter('max_braking_decel', 2.0)
+        self.declare_parameter('vehicle_limits_path', '')
         self.declare_parameter('wheelbase', 0.324)
         self.declare_parameter('lookahead_min', 0.55)
         self.declare_parameter('lookahead_max', 1.8)
@@ -79,6 +81,14 @@ class Driver(Node):
         )
         self.baseline_only = bool(self.get_parameter('baseline_only').value)
         self.safety_enabled = bool(self.get_parameter('safety_enabled').value)
+        limits_path = str(self.get_parameter('vehicle_limits_path').value).strip()
+        if limits_path == 'packaged':
+            limits_path = str(Path(get_package_share_directory('team_driver')) /
+                              'config' / 'vehicle_limits.yaml')
+        self.vehicle_limits = load_limits(Path(limits_path)) if limits_path else None
+        if self.vehicle_limits is not None:
+            self.target_speed = self.vehicle_limits.top_speed_mps
+            self.max_lateral_accel = self.vehicle_limits.lateral_mps2
         configured_path = str(self.get_parameter('centerline_path').value).strip()
         if configured_path:
             centerline_path = Path(configured_path)
@@ -104,11 +114,15 @@ class Driver(Node):
             self.controller, straight_speed=self.target_speed,
             max_lateral_accel=self.max_lateral_accel,
             max_braking_decel=float(self.get_parameter('max_braking_decel').value),
+            limits=self.vehicle_limits,
         )
         self.speed_controller = SpeedController(
             feedforward_gain=float(self.get_parameter('speed_ff_gain').value),
             kp=float(self.get_parameter('speed_kp').value),
             ki=float(self.get_parameter('speed_ki').value),
+            throttle_min=-1.0 if self.vehicle_limits is not None else -0.12,
+            throttle_max=1.0 if self.vehicle_limits is not None else 0.65,
+            active_braking=self.vehicle_limits is not None,
         )
         self.safety = LidarSafety(
             wheelbase=float(self.get_parameter('wheelbase').value),

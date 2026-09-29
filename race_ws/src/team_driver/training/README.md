@@ -53,6 +53,12 @@ save_limits(Path('config/vehicle_limits.yaml'), combine_limits(runs),
 PY
 ```
 
+The lateral value uses 95% of the 99th percentile clean observed corner
+load. A lower 90th-percentile setting caused the first fast candidate to
+brake too heavily and run about 27.7 s laps; the revised setting completed
+a clean 19.340 s best lap and 194.005 s ten-lap run. See
+`docs/fast-racing-progress.md` for the scored comparison.
+
 `gym_env.py` is the Gymnasium environment. It subscribes to
 AutoDRIVE LiDAR, odometry, lap count, and collision count, and publishes the
 same steering/throttle topics as the race driver. It reuses the race driver's

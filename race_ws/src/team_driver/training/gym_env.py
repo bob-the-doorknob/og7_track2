@@ -31,6 +31,7 @@ from team_driver.residual_policy import OBSERVATION_DIM, decode_action, pack_obs
 from team_driver.safety import LidarSafety
 from team_driver.speed_controller import SpeedController
 from team_driver.speed_profile import SpeedProfile
+from team_driver.vehicle_limits import load_limits
 
 REWARD_WEIGHTS = {
     "progress": 3.0, "cross_track": -0.02, "heading": -0.01,
@@ -58,6 +59,7 @@ class AutoDriveResidualEnv(gym.Env):
         training_mode: bool = False,
         vehicle_ns: str = "/autodrive/roboracer_1",
         centerline_path: str | Path | None = None,
+        vehicle_limits_path: str | Path | None = None,
         target_speed: float = 4.4,
         max_lateral_accel: float = 1.5,
         max_braking_decel: float = 2.0,
@@ -84,6 +86,14 @@ class AutoDriveResidualEnv(gym.Env):
 
         self.target_speed = float(target_speed)
         self.max_lateral_accel = float(max_lateral_accel)
+        if vehicle_limits_path == "packaged":
+            vehicle_limits_path = (Path(get_package_share_directory("team_driver")) /
+                                   "config" / "vehicle_limits.yaml")
+        self.vehicle_limits = (load_limits(Path(vehicle_limits_path))
+                               if vehicle_limits_path else None)
+        if self.vehicle_limits is not None:
+            self.target_speed = self.vehicle_limits.top_speed_mps
+            self.max_lateral_accel = self.vehicle_limits.lateral_mps2
         self.max_braking_decel = float(max_braking_decel)
         self.safety_horizon = float(safety_horizon)
         self.max_range = float(max_range)
@@ -109,11 +119,16 @@ class AutoDriveResidualEnv(gym.Env):
             self.controller, straight_speed=self.target_speed,
             max_lateral_accel=self.max_lateral_accel,
             max_braking_decel=self.max_braking_decel,
+            limits=self.vehicle_limits,
         )
         self.safety = LidarSafety(max_range=self.max_range,
                                   horizon=self.safety_horizon,
                                   max_steering_rad=MAX_STEERING_RAD)
-        self.speed_controller = SpeedController()
+        self.speed_controller = SpeedController(
+            throttle_min=-1.0 if self.vehicle_limits is not None else -0.12,
+            throttle_max=1.0 if self.vehicle_limits is not None else 0.65,
+            active_braking=self.vehicle_limits is not None,
+        )
 
         self.context = Context()
         rclpy.init(context=self.context)
