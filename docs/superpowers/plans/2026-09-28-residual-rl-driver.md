@@ -167,10 +167,10 @@ training reset has been sent yet.
 - Create: `race_ws/src/team_driver/training/train_sac.py`
 - Create: `race_ws/src/team_driver/weights/`
 
-- [ ] Train continuous residual actions with SAC against the practice build, saving checkpoints and episode metrics.
-- [ ] Record random seeds, simulator build, reward coefficients, training duration, and training step count with each checkpoint.
-- [ ] Export the selected actor to the simple weight format consumed by `residual_policy.py`; do not require PyTorch inference in the 40 Hz loop.
-- [ ] Keep a baseline checkpoint/commit available if training fails to converge or degrades clean-run reliability.
+- [x] Train continuous residual actions with SAC outside a scored run, saving checkpoints and episode metrics. The first 1,000-step run used the compete build; it is a pipeline run, not a performance claim.
+- [x] Record random seed, user-declared simulator build, reward coefficients, training duration, and training step count with each checkpoint.
+- [x] Export the actor to the simple weight format consumed by `residual_policy.py`; the race driver does not require PyTorch inference.
+- [x] Keep a zero-residual baseline checkpoint in `weights/baseline_residual.npz`. Candidate selection and full-run comparison remain Task 6.
 
 ### Task 6: Compare on the official compete build
 

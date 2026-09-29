@@ -20,6 +20,7 @@ import rclpy
 from ament_index_python.packages import get_package_share_directory
 from nav_msgs.msg import Odometry
 from rclpy.context import Context
+from rclpy.executors import SingleThreadedExecutor
 from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
 from std_msgs.msg import Bool, Float32, Int32
@@ -29,6 +30,14 @@ from team_driver.pure_pursuit import PurePursuit
 from team_driver.residual_policy import OBSERVATION_DIM, decode_action, pack_observation
 from team_driver.safety import LidarSafety
 from team_driver.speed_controller import SpeedController
+
+REWARD_WEIGHTS = {
+    "progress": 3.0, "cross_track": -0.02, "heading": -0.01,
+    "unsafe_speed": -0.04, "action_change": -0.03,
+    "rejected": -0.10, "collision": -10.0,
+    "off_course": -6.0, "lap_complete": 5.0,
+    "sensor_failure": -2.0,
+}
 
 
 class AutoDriveResidualEnv(gym.Env):
@@ -98,6 +107,8 @@ class AutoDriveResidualEnv(gym.Env):
         rclpy.init(context=self.context)
         try:
             self.node = Node("residual_training_env", context=self.context)
+            self.executor = SingleThreadedExecutor(context=self.context)
+            self.executor.add_node(self.node)
             ns = vehicle_ns.rstrip("/")
             qos = devkit_qos()
             self.steering_topic = f"{ns}/steering_command"
@@ -118,6 +129,8 @@ class AutoDriveResidualEnv(gym.Env):
             self.node.create_subscription(Int32, f"{ns}/lap_count",
                                           self._on_lap, qos)
         except Exception:
+            if hasattr(self, "executor"):
+                self.executor.shutdown()
             if hasattr(self, "node"):
                 self.node.destroy_node()
             self.context.try_shutdown()
@@ -178,7 +191,7 @@ class AutoDriveResidualEnv(gym.Env):
             remaining = deadline - time.monotonic()
             if remaining <= 0.0:
                 raise TimeoutError("AutoDRIVE LiDAR/odom/lap/collision telemetry timed out")
-            rclpy.spin_once(self.node, timeout_sec=min(remaining, 0.05))
+            self.executor.spin_once(timeout_sec=min(remaining, 0.05))
 
     def _telemetry_ready(self) -> bool:
         return (self.scan_ranges is not None and self.position is not None and
@@ -236,7 +249,7 @@ class AutoDriveResidualEnv(gym.Env):
               options: dict | None = None) -> tuple[np.ndarray, dict]:
         super().reset(seed=seed)
         # Give DDS a chance to discover a running referee or manual driver.
-        rclpy.spin_once(self.node, timeout_sec=0.2)
+        self.executor.spin_once(timeout_sec=0.2)
         self._guard_practice()
         self.done = True
         self._publish(0.0, 0.0)
@@ -288,7 +301,7 @@ class AutoDriveResidualEnv(gym.Env):
         except (TimeoutError, ValueError) as exc:
             self._publish(0.0, 0.0)
             self.done = True
-            return (self.previous_observation.copy(), -2.0, False, True,
+            return (self.previous_observation.copy(), REWARD_WEIGHTS["sensor_failure"], False, True,
                     {"reason": "sensor_failure", "error": str(exc)})
 
         progress = float(state["arc"] - self.previous_arc)
@@ -305,15 +318,15 @@ class AutoDriveResidualEnv(gym.Env):
         overspeed = max(0.0, state["speed"] - control["safe_target_speed"])
         change = float(np.linalg.norm(action - self.previous_action))
         terms = dict(
-            progress=3.0 * progress,
-            cross_track=-0.02 * abs(path.cross_track_error),
-            heading=-0.01 * abs(path.heading_error),
-            unsafe_speed=-0.04 * overspeed,
-            action_change=-0.03 * change,
-            rejected=-0.10 if control["safety_rejected"] else 0.0,
-            collision=-10.0 if collision else 0.0,
-            off_course=-6.0 if off_course else 0.0,
-            lap_complete=5.0 if success and not collision and not off_course else 0.0,
+            progress=REWARD_WEIGHTS["progress"] * progress,
+            cross_track=REWARD_WEIGHTS["cross_track"] * abs(path.cross_track_error),
+            heading=REWARD_WEIGHTS["heading"] * abs(path.heading_error),
+            unsafe_speed=REWARD_WEIGHTS["unsafe_speed"] * overspeed,
+            action_change=REWARD_WEIGHTS["action_change"] * change,
+            rejected=REWARD_WEIGHTS["rejected"] if control["safety_rejected"] else 0.0,
+            collision=REWARD_WEIGHTS["collision"] if collision else 0.0,
+            off_course=REWARD_WEIGHTS["off_course"] if off_course else 0.0,
+            lap_complete=REWARD_WEIGHTS["lap_complete"] if success and not collision and not off_course else 0.0,
         )
         reward = float(sum(terms.values()))
         self.steps += 1
@@ -341,6 +354,7 @@ class AutoDriveResidualEnv(gym.Env):
     def close(self) -> None:
         if hasattr(self, "node"):
             self._publish(0.0, 0.0)
+            self.executor.shutdown()
             self.node.destroy_node()
             del self.node
         if hasattr(self, "context"):
