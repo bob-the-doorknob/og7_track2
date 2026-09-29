@@ -5,6 +5,15 @@ from __future__ import annotations
 import math
 
 
+def control_dt(mode: str, now: float, previous: float | None) -> float:
+    """Choose a controller integration interval independent of ROS scheduling."""
+    if mode == "nominal":
+        return 0.025
+    if mode != "wall":
+        raise ValueError("control_dt_mode must be wall or nominal")
+    return 0.025 if previous is None else max(0.0, now - previous)
+
+
 class SpeedController:
     def __init__(
         self,

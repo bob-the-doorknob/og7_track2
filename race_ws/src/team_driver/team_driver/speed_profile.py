@@ -81,10 +81,12 @@ class SpeedProfile:
             denominator = (np.linalg.norm(first) * np.linalg.norm(second)
                            * np.linalg.norm(chord))
             curvature = (
-                2.0 * abs(float(np.cross(first, second))) / denominator
+                2.0 * float(np.cross(first, second)) / denominator
                 if denominator > 1e-8 else 0.0
             )
             curvature_values[index] = curvature
+
+        self.curvatures = curvature_values
 
         if limits is not None:
             self.limits = closed_lap_limits(curvature_values, self.spacing, limits)
@@ -94,7 +96,7 @@ class SpeedProfile:
         for index, curvature in enumerate(curvature_values):
             speed_limits[index] = min(
                 self.straight_speed,
-                math.sqrt(max_lateral_accel / max(curvature, 1e-4)),
+                math.sqrt(max_lateral_accel / max(abs(curvature), 1e-4)),
             )
 
         # Relax backwards twice around the closed track. A fast point must be
@@ -115,9 +117,19 @@ class SpeedProfile:
     def target_speed(self, position: tuple[float, float]) -> float:
         """Interpolate the planned speed at the projected path position."""
         _, _, arc = self.path._project(position)
+        return self._sample(self.limits, arc)
+
+    def _sample(self, values: np.ndarray, arc: float) -> float:
         sample = arc / self.spacing
-        index = int(math.floor(sample)) % len(self.limits)
+        index = int(math.floor(sample)) % len(values)
         fraction = sample - math.floor(sample)
-        ahead = (index + 1) % len(self.limits)
-        return float((1.0 - fraction) * self.limits[index]
-                     + fraction * self.limits[ahead])
+        ahead = (index + 1) % len(values)
+        return float((1.0 - fraction) * values[index]
+                     + fraction * values[ahead])
+
+    def future_features(self, position: tuple[float, float]) -> tuple[tuple[float, ...], tuple[float, ...]]:
+        """Curvature and target speed now, 1 m ahead, and 3 m ahead."""
+        _, _, arc = self.path._project(position)
+        offsets = (0.0, 1.0, 3.0)
+        return (tuple(self._sample(self.curvatures, arc + offset) for offset in offsets),
+                tuple(self._sample(self.limits, arc + offset) for offset in offsets))

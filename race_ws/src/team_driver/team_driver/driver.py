@@ -21,9 +21,10 @@ from visualization_msgs.msg import Marker, MarkerArray
 
 from team_driver.pure_pursuit import PurePursuit
 from team_driver.map_guard import MapGuard
-from team_driver.residual_policy import ResidualPolicy, pack_observation
+from team_driver.residual_policy import (ResidualPolicy, pack_observation,
+                                         pack_observation_v2)
 from team_driver.safety import LidarSafety
-from team_driver.speed_controller import SpeedController
+from team_driver.speed_controller import SpeedController, control_dt
 from team_driver.speed_profile import SpeedProfile
 from team_driver.vehicle_limits import load_limits, planning_limits
 
@@ -70,6 +71,7 @@ class Driver(Node):
         self.declare_parameter('speed_ff_gain', 0.16)
         self.declare_parameter('speed_kp', 0.24)
         self.declare_parameter('speed_ki', 0.08)
+        self.declare_parameter('control_dt_mode', 'wall')
         self.declare_parameter('baseline_only', True)
         self.declare_parameter('policy_path', '')
         self.declare_parameter('safety_enabled', True)
@@ -85,6 +87,8 @@ class Driver(Node):
         )
         self.baseline_only = bool(self.get_parameter('baseline_only').value)
         self.safety_enabled = bool(self.get_parameter('safety_enabled').value)
+        self.control_dt_mode = str(self.get_parameter('control_dt_mode').value)
+        control_dt(self.control_dt_mode, 0.0, None)
         limits_path = str(self.get_parameter('vehicle_limits_path').value).strip()
         if limits_path == 'packaged':
             limits_path = str(Path(get_package_share_directory('team_driver')) /
@@ -219,7 +223,7 @@ class Driver(Node):
     # ------------------------------------------------------------------
     def scan_callback(self, scan):
         now = time.monotonic()
-        dt = 0.025 if self.last_control_time is None else now - self.last_control_time
+        dt = control_dt(self.control_dt_mode, now, self.last_control_time)
         self.last_control_time = now
         ranges, angles = self.preprocess(scan)
         steering, throttle = self.plan(ranges, angles, dt, scan.ranges)
@@ -274,13 +278,24 @@ class Driver(Node):
         if self.policy is not None:
             try:
                 path_state = self.controller.path_state(self.position, self.yaw)
-                observation = pack_observation(
-                    ranges if raw_ranges is None else raw_ranges, angles,
-                    self.speed, path_state.heading_error,
-                    path_state.cross_track_error,
-                    path_state.upcoming_curvature, baseline_steering,
-                    baseline_target_speed, self.max_range,
-                )
+                lidar_ranges = ranges if raw_ranges is None else raw_ranges
+                if self.policy.observation_version == 2:
+                    future_curvature, future_targets = self.speed_profile.future_features(
+                        self.position)
+                    observation = pack_observation_v2(
+                        lidar_ranges, angles, self.speed,
+                        path_state.heading_error, path_state.cross_track_error,
+                        future_curvature,
+                        (baseline_target_speed, *future_targets[1:]),
+                        baseline_steering, self.target_speed, self.max_range,
+                    )
+                else:
+                    observation = pack_observation(
+                        lidar_ranges, angles, self.speed,
+                        path_state.heading_error, path_state.cross_track_error,
+                        path_state.upcoming_curvature, baseline_steering,
+                        baseline_target_speed, self.max_range,
+                    )
                 steering_delta, speed_multiplier = self.policy.predict(observation)
                 steering = float(np.clip(baseline_steering + steering_delta, -1.0, 1.0))
                 target_speed = min(

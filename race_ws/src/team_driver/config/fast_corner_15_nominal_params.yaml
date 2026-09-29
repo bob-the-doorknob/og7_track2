@@ -1,0 +1,24 @@
+# A/B experiment: same proven 15 m/s^2 classical settings with a nominal
+# 40 Hz PI integration step to reduce dependence on simulator window pacing.
+driver:
+  ros__parameters:
+    vehicle_ns: /autodrive/roboracer_1
+    max_range: 10.0
+    centerline_path: ""
+    vehicle_limits_path: packaged
+    planning_lateral_mps2: 15.0
+    control_dt_mode: nominal
+    wheelbase: 0.324
+    lookahead_min: 0.55
+    lookahead_max: 1.8
+    lookahead_speed_gain: 0.35
+    speed_ff_gain: 0.16
+    speed_kp: 0.24
+    speed_ki: 0.08
+    baseline_only: true
+    policy_path: ""
+    safety_enabled: true
+    safety_side_margin: 0.08
+    safety_stop_margin: 0.25
+    safety_max_deceleration: 2.0
+    safety_horizon: 10.0

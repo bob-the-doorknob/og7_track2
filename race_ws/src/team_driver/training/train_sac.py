@@ -21,7 +21,10 @@ from stable_baselines3 import SAC
 from stable_baselines3.common.callbacks import BaseCallback
 
 from team_driver.residual_policy import (
-    MODEL_FORMAT_VERSION, OBSERVATION_VERSION, ResidualPolicy, decode_action,
+    MODEL_FORMAT_VERSION, MODEL_FORMAT_VERSION_V2,
+    OBSERVATION_DIM, OBSERVATION_DIM_V2,
+    OBSERVATION_VERSION, OBSERVATION_VERSION_V2,
+    ResidualPolicy, decode_action,
 )
 from training.gym_env import AutoDriveResidualEnv, REWARD_WEIGHTS
 
@@ -37,8 +40,15 @@ class ZeroStartSAC(SAC):
 
 
 def export_actor(model: SAC, path: Path) -> None:
-    """Write the deterministic tanh(mu) actor in runtime's format v1."""
+    """Write a deterministic actor with the matching observation version."""
     actor = model.policy.actor
+    observation_dim = int(model.observation_space.shape[0])
+    if observation_dim not in (OBSERVATION_DIM, OBSERVATION_DIM_V2):
+        raise ValueError("unsupported actor observation dimension")
+    version = (OBSERVATION_VERSION_V2 if observation_dim == OBSERVATION_DIM_V2
+               else OBSERVATION_VERSION)
+    format_version = (MODEL_FORMAT_VERSION_V2 if version == 2
+                      else MODEL_FORMAT_VERSION)
     layers = (actor.latent_pi[0], actor.latent_pi[2], actor.mu)
     arrays = {}
     for index, layer in enumerate(layers):
@@ -47,15 +57,15 @@ def export_actor(model: SAC, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(".tmp.npz")
     np.savez_compressed(
-        temporary, format_version=np.int64(MODEL_FORMAT_VERSION),
-        observation_version=np.int64(OBSERVATION_VERSION), **arrays,
+        temporary, format_version=np.int64(format_version),
+        observation_version=np.int64(version), **arrays,
     )
     runtime = ResidualPolicy.load(temporary)
     # The runtime applies decode_action after tanh. Compare physical controls,
     # including on nonzero states, before accepting an export.
     rng = np.random.default_rng(9182)
-    for observation in [np.zeros(24, dtype=np.float32),
-                        *rng.uniform(-1, 1, (8, 24)).astype(np.float32)]:
+    for observation in [np.zeros(observation_dim, dtype=np.float32),
+                        *rng.uniform(-1, 1, (8, observation_dim)).astype(np.float32)]:
         raw, _ = model.predict(observation, deterministic=True)
         expected = np.asarray(decode_action(raw))
         actual = np.asarray(runtime.predict(observation))
@@ -123,8 +133,10 @@ class RunRecorder(BaseCallback):
             "reward_weights": REWARD_WEIGHTS,
             "torch_version": torch.__version__,
             "stable_baselines3_version": stable_baselines3.__version__,
-            "runtime_format_version": MODEL_FORMAT_VERSION,
-            "observation_version": OBSERVATION_VERSION,
+            "runtime_format_version": (MODEL_FORMAT_VERSION_V2
+                                       if self.settings["observation_version"] == 2
+                                       else MODEL_FORMAT_VERSION),
+            "observation_version": self.settings["observation_version"],
         }
         checkpoint.with_suffix(".json").write_text(
             json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -151,6 +163,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-lateral-accel", type=float, default=1.5)
     parser.add_argument("--max-braking-decel", type=float, default=2.0)
     parser.add_argument("--safety-horizon", type=float, default=5.5)
+    parser.add_argument("--vehicle-limits-path", type=Path)
+    parser.add_argument("--planning-lateral-mps2", type=float, default=0.0)
+    parser.add_argument("--planning-top-speed-mps", type=float, default=0.0)
+    parser.add_argument("--observation-version", type=int, choices=(1, 2), default=1)
     parser.add_argument("--output-dir", type=Path, default=Path("training/runs"))
     parser.add_argument("--run-id", help="directory name; defaults to UTC time and seed")
     args = parser.parse_args()
@@ -164,6 +180,12 @@ def parse_args() -> argparse.Namespace:
             args.target_speed, args.max_lateral_accel, args.max_braking_decel,
             args.safety_horizon)):
         parser.error("speed and acceleration limits must be finite and positive")
+    if (not np.isfinite(args.planning_lateral_mps2) or args.planning_lateral_mps2 < 0
+            or not np.isfinite(args.planning_top_speed_mps)
+            or args.planning_top_speed_mps < 0):
+        parser.error("planning overrides must be finite and nonnegative")
+    if args.observation_version == 2 and args.vehicle_limits_path is None:
+        parser.error("v2 training requires --vehicle-limits-path")
     if args.simulator_variant == "practice" and args.centerline is None:
         parser.error("practice training needs --centerline for the practice map")
     return args
@@ -187,7 +209,13 @@ def main() -> None:
         "max_lateral_accel": args.max_lateral_accel,
         "max_braking_decel": args.max_braking_decel,
         "safety_horizon": args.safety_horizon,
-        "algorithm": "SAC", "actor_layers": [24, 64, 64, 2],
+        "vehicle_limits_path": str(args.vehicle_limits_path.resolve()) if args.vehicle_limits_path else None,
+        "planning_lateral_mps2": args.planning_lateral_mps2,
+        "planning_top_speed_mps": args.planning_top_speed_mps,
+        "observation_version": args.observation_version,
+        "algorithm": "SAC", "actor_layers": [
+            OBSERVATION_DIM_V2 if args.observation_version == 2 else OBSERVATION_DIM,
+            64, 64, 2],
         "run_started_utc": datetime.now(timezone.utc).isoformat(),
     }
     env = None
@@ -200,7 +228,13 @@ def main() -> None:
             max_lateral_accel=args.max_lateral_accel,
             max_braking_decel=args.max_braking_decel,
             safety_horizon=args.safety_horizon,
+            vehicle_limits_path=args.vehicle_limits_path,
+            planning_lateral_mps2=args.planning_lateral_mps2,
+            planning_top_speed_mps=args.planning_top_speed_mps,
+            observation_version=args.observation_version,
         )
+        settings["effective_target_speed_mps"] = env.target_speed
+        settings["effective_lateral_mps2"] = env.max_lateral_accel
         model = ZeroStartSAC(
             "MlpPolicy", env, policy_kwargs={"net_arch": {"pi": [64, 64], "qf": [64, 64]}},
             learning_starts=args.baseline_steps, buffer_size=50000,

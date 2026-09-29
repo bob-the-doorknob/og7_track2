@@ -109,3 +109,6 @@ alone cannot verify stopping from 9 m/s at the measured 2.8 m/s² deceleration.
 The 10 m scan's clear-horizon speed cap is only lifted for a prechecked
 map line and an aligned straight pose; detected obstacles still constrain
 speed. Its on/off behavior needs telemetry analysis before another full run.
+
+Residual RL v2 training and the subsequent live simulator regression are
+recorded in `docs/rl-v2-training-2026-09-30.md`. No v2 actor has been promoted.

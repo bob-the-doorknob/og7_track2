@@ -1,6 +1,12 @@
 """The fast controller can use full throttle and actively brake."""
 
-from team_driver.speed_controller import SpeedController
+from team_driver.speed_controller import SpeedController, control_dt
+
+
+def test_nominal_control_dt_is_independent_of_window_pacing():
+    assert control_dt("nominal", 10.2, 10.0) == 0.025
+    assert control_dt("nominal", 10.02, 10.0) == 0.025
+    assert abs(control_dt("wall", 10.2, 10.0) - 0.2) < 1e-8
 
 
 def test_fast_controller_uses_full_throttle_when_far_below_target():

@@ -2,6 +2,10 @@
 
 ## Measure the vehicle before raising speed
 
+The 5,000-step fast-baseline residual RL v2 experiment and its scored
+diagnostics are recorded in `docs/rl-v2-training-2026-09-30.md`. The v2 actor
+has not replaced the selected v1 model.
+
 `training.vehicle_calibration` only subscribes to telemetry; run it beside
 one normal driver outside a scored evaluation. From the `team_driver` source
 directory in the ROS-sourced container shell:

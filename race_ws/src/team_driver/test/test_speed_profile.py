@@ -40,3 +40,16 @@ def test_straight_uses_observed_vehicle_speed_without_a_fixed_cap():
     assert np.allclose(closed_lap_limits(np.zeros(30), 0.5, limits), 9.2)
 
 
+def test_future_features_are_finite_across_path_seam():
+    from pathlib import Path
+
+    path = PurePursuit(Path(__file__).resolve().parents[4] / "maps" /
+                       "icra26_compete_racing_line.csv")
+    profile = SpeedProfile(path, limits=VehicleLimits(6.3, 2.8, 2.8, 15.0, 0.0))
+    curvature, targets = profile.future_features(tuple(path._point_at(path.total_length - 0.1)))
+    assert len(curvature) == len(targets) == 3
+    assert np.all(np.isfinite(curvature))
+    assert np.all(np.isfinite(targets))
+    assert np.all(np.asarray(targets) > 0.0)
+
+

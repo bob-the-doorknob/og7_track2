@@ -27,7 +27,9 @@ from std_msgs.msg import Bool, Float32, Int32
 
 from team_driver.driver import MAX_STEERING_RAD, devkit_qos
 from team_driver.pure_pursuit import PurePursuit
-from team_driver.residual_policy import OBSERVATION_DIM, decode_action, pack_observation
+from team_driver.residual_policy import (OBSERVATION_DIM, OBSERVATION_DIM_V2,
+                                         decode_action, pack_observation,
+                                         pack_observation_v2)
 from team_driver.safety import LidarSafety
 from team_driver.speed_controller import SpeedController
 from team_driver.speed_profile import SpeedProfile
@@ -39,6 +41,7 @@ REWARD_WEIGHTS = {
     "rejected": -0.10, "collision": -10.0,
     "off_course": -6.0, "lap_complete": 5.0,
     "sensor_failure": -2.0,
+    "step_time": -0.02,
 }
 
 
@@ -46,8 +49,8 @@ class AutoDriveResidualEnv(gym.Env):
     """One residual action per ``frame_skip`` LiDAR frames, using ROS topics.
 
     Actions are the two raw policy outputs in [-1, 1]. Zero means the measured
-    classical controller. Observations use ``pack_observation`` version 1,
-    exactly as the race driver does. Each instance owns its own ROS context.
+    classical controller. Observations use the selected version of the same
+    packer as the race driver. Each instance owns its own ROS context.
     """
 
     metadata = {"render_modes": []}
@@ -62,6 +65,7 @@ class AutoDriveResidualEnv(gym.Env):
         vehicle_limits_path: str | Path | None = None,
         planning_lateral_mps2: float = 0.0,
         planning_top_speed_mps: float = 0.0,
+        observation_version: int = 1,
         target_speed: float = 4.4,
         max_lateral_accel: float = 1.5,
         max_braking_decel: float = 2.0,
@@ -78,6 +82,8 @@ class AutoDriveResidualEnv(gym.Env):
             raise ValueError("training resets require training_mode=True")
         if simulator_variant not in ("practice", "compete"):
             raise ValueError("simulator_variant must be 'practice' or 'compete'")
+        if observation_version not in (1, 2):
+            raise ValueError("observation_version must be 1 or 2")
         if frame_skip < 1 or max_steps < 1 or episode_laps < 1:
             raise ValueError("frame_skip, max_steps and episode_laps must be positive")
         if not all(math.isfinite(x) and x > 0.0 for x in (
@@ -108,9 +114,13 @@ class AutoDriveResidualEnv(gym.Env):
         self.episode_laps = int(episode_laps)
         self.sensor_timeout_s = float(sensor_timeout_s)
         self.off_course_m = float(off_course_m)
+        self.observation_version = int(observation_version)
+        observation_dim = (OBSERVATION_DIM_V2 if observation_version == 2
+                           else OBSERVATION_DIM)
         self.observation_space = gym.spaces.Box(
-            low=np.array([0.0] * 18 + [-1.0] * 6, dtype=np.float32),
-            high=np.ones(OBSERVATION_DIM, dtype=np.float32),
+            low=np.array([0.0] * 18 + [-1.0] * (observation_dim - 18),
+                         dtype=np.float32),
+            high=np.ones(observation_dim, dtype=np.float32),
             dtype=np.float32,
         )
         self.action_space = gym.spaces.Box(-1.0, 1.0, shape=(2,), dtype=np.float32)
@@ -242,11 +252,21 @@ class AutoDriveResidualEnv(gym.Env):
             self.speed_profile.target_speed(self.position),
             math.sqrt(self.max_lateral_accel / max(abs(curvature), 1e-4)),
         )
-        observation = pack_observation(
-            self.scan_ranges, self.scan_angles, self.speed,
-            path.heading_error, path.cross_track_error, path.upcoming_curvature,
-            baseline_steering, baseline_speed, self.max_range,
-        )
+        if self.observation_version == 2:
+            future_curvature, future_targets = self.speed_profile.future_features(
+                self.position)
+            observation = pack_observation_v2(
+                self.scan_ranges, self.scan_angles, self.speed,
+                path.heading_error, path.cross_track_error,
+                future_curvature, (baseline_speed, *future_targets[1:]),
+                baseline_steering, self.target_speed, self.max_range,
+            )
+        else:
+            observation = pack_observation(
+                self.scan_ranges, self.scan_angles, self.speed,
+                path.heading_error, path.cross_track_error, path.upcoming_curvature,
+                baseline_steering, baseline_speed, self.max_range,
+            )
         _, _, arc = self.controller._project(self.position)
         return dict(observation=observation, arc=arc, path=path,
                     baseline_steering=baseline_steering,
@@ -371,6 +391,7 @@ class AutoDriveResidualEnv(gym.Env):
             collision=REWARD_WEIGHTS["collision"] if collision else 0.0,
             off_course=REWARD_WEIGHTS["off_course"] if off_course else 0.0,
             lap_complete=REWARD_WEIGHTS["lap_complete"] if success and not collision and not off_course else 0.0,
+            step_time=REWARD_WEIGHTS["step_time"],
         )
         reward = float(sum(terms.values()))
         self.steps += 1
