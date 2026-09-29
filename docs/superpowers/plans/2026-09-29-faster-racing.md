@@ -43,10 +43,10 @@
 - Consumes ROS odometry, LiDAR, lap/collision counters, and the driver's published throttle/steering during a non-scored calibration run.
 - Produces `team_driver.vehicle_limits.VehicleLimits` with `top_speed_mps`, `accel_mps2`, `brake_mps2`, `lateral_mps2`, `control_delay_s`; `estimate_limits(rows: np.ndarray) -> VehicleLimits` and `load_limits(path: Path) -> VehicleLimits` use a YAML file containing estimates, sample count, simulator build, and provenance.
 
-- [ ] **Step 1: Specify acceptance examples.** Include empty/non-finite trace rejection, speed estimates based on measured odometry rather than targets, conservative braking/grip quantiles, and valid YAML round-trip. Capture the same examples in `test/test_vehicle_calibration.py` during implementation.
-- [ ] **Step 2: Implement capture and estimation.** Record timestamps, pose, speed, throttle, steering, projected arc, LiDAR clearance, and lap/collision counts to ignored `training/runs/<id>/`; derive limits from clean intervals and write `config/vehicle_limits.yaml` only when sufficient clean data exists.
-- [ ] **Step 3: Collect non-scored calibration laps.** Run the existing 4.4 m/s champion first, then cautiously increase baseline targets on safe straights in separate runs. Record measured top speed and braking response; never infer a physical maximum merely from a configured target.
-- [ ] **Step 4: Check and commit.** Inspect raw traces and the derived YAML, record simulator version and sample counts, and commit the calibration code, documentation, and chosen limits. Keep raw logs ignored locally.
+- [x] **Step 1: Specify acceptance examples.** Include empty/non-finite trace rejection, speed estimates based on measured odometry rather than targets, conservative braking/grip quantiles, and valid YAML round-trip. Capture the same examples in `test/test_vehicle_calibration.py` during implementation.
+- [x] **Step 2: Implement capture and estimation.** Record timestamps, pose, speed, throttle, steering, projected arc, LiDAR clearance, and lap/collision counts to ignored `training/runs/<id>/`; derive limits from clean intervals and write `config/vehicle_limits.yaml` only when sufficient clean data exists.
+- [x] **Step 3: Collect non-scored calibration laps.** Run the existing 4.4 m/s champion first, then cautiously increase baseline targets on safe straights in separate runs. Record measured top speed and braking response; never infer a physical maximum merely from a configured target.
+- [x] **Step 4: Check and commit.** Inspect raw traces and the derived YAML, record simulator version and sample counts, and commit the calibration code, documentation, and chosen limits. Keep raw logs ignored locally.
 
 ### Task 2: Closed-lap speed planning and longitudinal control
 

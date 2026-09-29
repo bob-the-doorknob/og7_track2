@@ -1,5 +1,58 @@
 # AutoDRIVE training environment
 
+## Measure the vehicle before raising speed
+
+`training.vehicle_calibration` only subscribes to telemetry; run it beside
+one normal driver outside a scored evaluation. From the `team_driver` source
+directory in the ROS-sourced container shell:
+
+```bash
+PYTHONPATH=.:$PYTHONPATH python3 -m training.vehicle_calibration \
+  --run-id calibration_44_a --simulator-build 2026-icra-compete \
+  --duration-s 60
+```
+
+The CSV is saved under the ignored `training/runs/<run-id>/telemetry.csv`.
+The YAML in `config/vehicle_limits.yaml` records the measured values and trace
+provenance. The recorder rejects collisions and insufficient acceleration,
+slowing, or corner samples. If the normal driver never issues negative
+throttle, its braking estimate uses **straight coasting** with zero throttle;
+this is a conservative deceleration floor, not a measurement of maximum
+active braking. The `top_speed_mps` field is the highest speed **observed so
+far**, not the car's physical maximum. Recalibrate after faster clean runs.
+
+For the first calibration, use the selected 4.4 m/s driver. To measure above
+that, stop it and start the classical driver with `-p baseline_only:=true`, a
+small increase in `-p target_speed`, and a LiDAR horizon that can support the
+trial. Do not use the 4.4 m/s actor outside its training range. The first
+three clean traces used targets 4.4, 5.2, and 6.0 m/s. They observed peaks
+4.83, 5.51, and 6.30 m/s with zero collisions. The 5.2 and 6.0 trials used
+`-p safety_horizon:=10.0`; their raw traces remain local and uncommitted.
+The current calibrated YAML combines the highest clean observed speed and
+lateral load with the conservative acceleration and coasting deceleration
+from those runs. Recreate that combination from the CSVs:
+
+```bash
+PYTHONPATH=.:$PYTHONPATH python3 - <<'PY'
+from pathlib import Path
+import numpy as np
+from training.vehicle_calibration import COLUMNS, estimate_limits
+from team_driver.vehicle_limits import combine_limits, save_limits
+
+ids = ('calibration_44_a', 'calibration_52_a', 'calibration_60_a')
+runs, count = [], 0
+for run_id in ids:
+    trace = np.genfromtxt(Path('training/runs') / run_id / 'telemetry.csv',
+                          delimiter=',', names=True)
+    rows = np.column_stack([trace[name] for name in COLUMNS])
+    runs.append(estimate_limits(rows))
+    count += len(rows)
+save_limits(Path('config/vehicle_limits.yaml'), combine_limits(runs),
+            sample_count=count, simulator_build='2026-icra-compete',
+            trace_id=','.join(ids))
+PY
+```
+
 `gym_env.py` is the Gymnasium environment. It subscribes to
 AutoDRIVE LiDAR, odometry, lap count, and collision count, and publishes the
 same steering/throttle topics as the race driver. It reuses the race driver's

@@ -1,0 +1,9 @@
+top_speed_mps: 6.296532082027376
+accel_mps2: 2.7830770517399475
+brake_mps2: 2.798176300464414
+lateral_mps2: 1.6977943055069815
+control_delay_s: 0.01604485511779785
+sample_count: 10130
+simulator_build: 2026-icra-compete
+trace_id: calibration_44_a,calibration_52_a,calibration_60_a
+top_speed_interpretation: highest observed; not a physical maximum
