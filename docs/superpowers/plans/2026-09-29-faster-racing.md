@@ -6,7 +6,7 @@
 
 **Architecture:** Measure the car's limits, then optimize a map-constrained line and a closed-lap speed profile with acceleration, braking, and lateral-grip constraints. Track that reference with feedforward and feedback control; keep a map-aware and LiDAR guard outside the optional residual policy. Retrain RL only after the classical controller improves scored runs.
 
-**Tech Stack:** Python 3.10, ROS 2 Humble, NumPy, SciPy, Pillow, PyYAML, Gymnasium and SAC for offline training, AutoDRIVE compete simulator.
+**Tech Stack:** Python 3.10, ROS 2 Humble, NumPy, Pillow, PyYAML, Gymnasium and SAC for offline training, AutoDRIVE compete simulator. SciPy was unavailable in the container; the offline line search uses NumPy instead.
 
 **Spec:** `docs/superpowers/specs/2026-09-29-faster-racing-design.md`
 
@@ -83,10 +83,10 @@
 - Consumes `maps/icra26_compete.yaml`, the centerline CSV, Task 1 limits, and Task 2's `SpeedProfile.predicted_lap_time_s()`.
 - Produces `generate_line(center: np.ndarray, grid: TrackMap, limits: VehicleLimits, margin_m: float) -> np.ndarray`; output is a closed ordered x/y CSV accepted by `PurePursuit`.
 
-- [ ] **Step 1: Pin map and geometry examples.** Treat occupied and unknown pixels as non-drivable, flip image rows into world coordinates correctly, reject out-of-bounds points and links crossing a duct, and enforce at least the vehicle footprint plus uncertainty margin along every segment.
-- [ ] **Step 2: Implement the map reader.** Read the existing PGM/YAML from an offline module under `team_driver`; do not modify or depend on the protected `scripts/` files at runtime.
-- [ ] **Step 3: Optimize full-lap time.** Parameterize bounded lateral offsets from the centerline, use the current geometric racing line as the initial candidate, and minimize Task 2's estimated lap time subject to clearance and smoothness. Reject invalid candidates and keep the previous line if no valid improvement is found.
-- [ ] **Step 4: Validate and commit.** Record line length, minimum map clearance, predicted lap time, and actual complete scored results against the same speed/controller settings. Package a new line only after a clean measured improvement; retain the old line for rollback.
+- [x] **Step 1: Pin map and geometry examples.** Treat occupied and unknown pixels as non-drivable, flip image rows into world coordinates correctly, reject out-of-bounds points and links crossing a duct, and enforce at least the vehicle footprint plus uncertainty margin along every segment.
+- [x] **Step 2: Implement the map reader.** Read the existing PGM/YAML from an offline module under `team_driver`; do not modify or depend on the protected `scripts/` files at runtime.
+- [x] **Step 3: Optimize full-lap time.** Parameterize bounded lateral offsets from the centerline, use the current geometric racing line as the initial candidate, and minimize Task 2's estimated lap time subject to clearance and smoothness. Reject invalid candidates and keep the previous line if no valid improvement is found.
+- [x] **Step 4: Validate and commit.** Record line length, minimum map clearance, predicted lap time, and actual complete scored results against the same speed/controller settings. Package a new line only after a clean measured improvement; retain the old line for rollback. The initial candidate was slower in a complete three-lap pilot, so no replacement line was packaged.
 
 ### Task 4: Online tracking and map-aware safety
 

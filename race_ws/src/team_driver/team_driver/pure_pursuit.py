@@ -21,14 +21,21 @@ class PurePursuit:
 
     def __init__(
         self,
-        centerline_path: str | Path,
+        centerline_path: str | Path | np.ndarray,
         wheelbase: float = 0.324,
         max_steering_rad: float = 0.5236,
         lookahead_min: float = 0.55,
         lookahead_max: float = 1.8,
         lookahead_speed_gain: float = 0.35,
     ) -> None:
-        self.points = self._load_centerline(centerline_path)
+        if isinstance(centerline_path, np.ndarray):
+            self.points = np.asarray(centerline_path, dtype=np.float64).copy()
+            if (self.points.ndim != 2 or self.points.shape[0] < 3
+                    or self.points.shape[1] != 2
+                    or not np.all(np.isfinite(self.points))):
+                raise ValueError("path needs at least three finite x/y points")
+        else:
+            self.points = self._load_centerline(centerline_path)
         self.wheelbase = max(float(wheelbase), 1e-3)
         self.max_steering_rad = max(float(max_steering_rad), 1e-3)
         self.lookahead_min = max(float(lookahead_min), 0.1)

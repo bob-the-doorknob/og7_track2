@@ -189,6 +189,27 @@ exploration and one collision. The deterministic scored comparison is in
 `docs/track2-44-comparison.md`; its selected-policy runs completed without
 collisions and were faster than the baseline runs.
 
+## Offline racing-line search
+
+With the container running, from `race_ws/src/team_driver` in the isolated
+worktree, run this only outside a scored race:
+
+```bash
+PYTHONPATH=. python3 -m training.optimize_line \
+  --map /hackathon/.worktrees/task1-residual-rl-baseline/maps/icra26_compete.yaml \
+  --center /hackathon/.worktrees/task1-residual-rl-baseline/maps/icra26_compete_centerline.csv \
+  --initial /hackathon/.worktrees/task1-residual-rl-baseline/maps/icra26_compete_racing_line.csv \
+  --limits config/vehicle_limits.yaml \
+  --output /hackathon/.worktrees/task1-residual-rl-baseline/results/line_candidate.csv \
+  --margin 0.28
+```
+
+This searches the full-lap speed-planner estimate while requiring conservative
+clearance along every path link. The existing line's estimated minimum is
+0.291 m. The first 0.28 m candidate reduced predicted time but was slower
+in the AutoDRIVE three-lap pilot, so it was not installed. Use scored laps
+to select a line; predicted time alone does not capture path-tracking error.
+
 ## Reward and episode end
 
 Each step rewards forward centreline progress. It charges small costs for
