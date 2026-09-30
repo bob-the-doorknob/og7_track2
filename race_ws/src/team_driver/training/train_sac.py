@@ -8,6 +8,7 @@ AutoDRIVE does not expose a trustworthy build identifier over ROS.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import os
@@ -18,6 +19,7 @@ from pathlib import Path
 import numpy as np
 import stable_baselines3
 import torch
+import yaml
 from stable_baselines3 import SAC
 from stable_baselines3.common.callbacks import BaseCallback
 
@@ -169,6 +171,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--target-speed", type=float, default=4.4)
     parser.add_argument("--max-lateral-accel", type=float, default=1.5)
     parser.add_argument("--max-braking-decel", type=float, default=2.0)
+    parser.add_argument("--safety-max-deceleration", type=float, default=2.0)
     parser.add_argument("--safety-horizon", type=float, default=5.5)
     parser.add_argument("--vehicle-limits-path", type=Path)
     parser.add_argument("--map-guard-path",
@@ -180,7 +183,32 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--run-id", help="directory name; defaults to UTC time and seed")
     parser.add_argument("--resume", type=Path,
                         help="SAC checkpoint to continue from with a fresh replay buffer")
+    parser.add_argument("--baseline-config", type=Path,
+                        help="load the classical driver's matching training settings")
     args = parser.parse_args()
+    if args.baseline_config is not None:
+        payload = yaml.safe_load(args.baseline_config.read_text(encoding="utf-8"))
+        params = payload["driver"]["ros__parameters"]
+        if (not params.get("baseline_only") or not params.get("safety_enabled")
+                or params.get("wheelbase") != 0.324
+                or params.get("safety_side_margin") != 0.08
+                or params.get("safety_stop_margin") != 0.25
+                or params.get("speed_ff_gain") != 0.16
+                or params.get("speed_kp") != 0.24
+                or params.get("speed_ki") != 0.08
+                or params.get("max_range") != 10.0):
+            parser.error("baseline config uses controller settings unsupported by the training environment")
+        args.centerline = Path(params["centerline_path"]) if params["centerline_path"] else None
+        args.vehicle_limits_path = (
+            args.baseline_config.parent / "vehicle_limits.yaml"
+            if params["vehicle_limits_path"] == "packaged"
+            else Path(params["vehicle_limits_path"])
+        )
+        args.map_guard_path = params["map_guard_path"]
+        for key in ("planning_lateral_mps2", "planning_top_speed_mps",
+                    "lookahead_min", "lookahead_max", "lookahead_speed_gain",
+                    "safety_max_deceleration", "safety_horizon"):
+            setattr(args, key, float(params[key]))
     if args.steps < 1 or args.baseline_steps < 1 or args.checkpoint_every < 1:
         parser.error("steps, baseline-steps and checkpoint-every must be positive")
     if args.baseline_steps >= args.steps:
@@ -193,7 +221,8 @@ def parse_args() -> argparse.Namespace:
         parser.error("frame-skip and max-episode-steps must be positive")
     if not all(np.isfinite(value) and value > 0.0 for value in (
             args.target_speed, args.max_lateral_accel, args.max_braking_decel,
-            args.safety_horizon, args.lookahead_min, args.lookahead_max)):
+            args.safety_horizon, args.safety_max_deceleration,
+            args.lookahead_min, args.lookahead_max)):
         parser.error("speed and acceleration limits must be finite and positive")
     if args.lookahead_max < args.lookahead_min or not np.isfinite(args.lookahead_speed_gain) or args.lookahead_speed_gain < 0:
         parser.error("lookahead bounds or gain are invalid")
@@ -231,6 +260,10 @@ def main() -> None:
         "max_lateral_accel": args.max_lateral_accel,
         "max_braking_decel": args.max_braking_decel,
         "safety_horizon": args.safety_horizon,
+        "safety_max_deceleration": args.safety_max_deceleration,
+        "baseline_config": str(args.baseline_config.resolve()) if args.baseline_config else None,
+        "baseline_config_sha256": (hashlib.sha256(args.baseline_config.read_bytes()).hexdigest()
+                                   if args.baseline_config else None),
         "vehicle_limits_path": str(args.vehicle_limits_path.resolve()) if args.vehicle_limits_path else None,
         "map_guard_path": args.map_guard_path,
         "planning_lateral_mps2": args.planning_lateral_mps2,
@@ -253,6 +286,7 @@ def main() -> None:
             max_lateral_accel=args.max_lateral_accel,
             max_braking_decel=args.max_braking_decel,
             safety_horizon=args.safety_horizon,
+            safety_max_deceleration=args.safety_max_deceleration,
             lookahead_min=args.lookahead_min,
             lookahead_max=args.lookahead_max,
             lookahead_speed_gain=args.lookahead_speed_gain,

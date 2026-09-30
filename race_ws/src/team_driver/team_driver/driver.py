@@ -191,10 +191,19 @@ class Driver(Node):
             self.get_logger().info('Residual policy disabled; running the classical baseline.')
         else:
             configured_policy_path = str(self.get_parameter('policy_path').value).strip()
-            policy_path = (Path(configured_policy_path) if configured_policy_path else
-                           Path(get_package_share_directory('team_driver')) /
-                           'weights' / 'residual_policy.npz')
+            policy_path = None
             try:
+                if configured_policy_path.startswith('packaged:'):
+                    actor_name = configured_policy_path.removeprefix('packaged:')
+                    if (not actor_name.endswith('.npz') or
+                            Path(actor_name).name != actor_name):
+                        raise ValueError('packaged policy must be an npz filename')
+                    policy_path = (Path(get_package_share_directory('team_driver')) /
+                                   'weights' / actor_name)
+                else:
+                    policy_path = (Path(configured_policy_path) if configured_policy_path else
+                                   Path(get_package_share_directory('team_driver')) /
+                                   'weights' / 'residual_policy.npz')
                 self.policy = ResidualPolicy.load(policy_path)
                 self.get_logger().info(f'Loaded residual policy from {policy_path}')
             except (OSError, KeyError, ValueError, zipfile.BadZipFile) as exc:

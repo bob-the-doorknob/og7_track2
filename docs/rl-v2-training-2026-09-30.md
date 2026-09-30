@@ -1,5 +1,9 @@
 # Fast-baseline residual RL, 30 September 2026
 
+Latest update: v2 residual RL trained on the proven 11.639-second classical
+baseline completed two clean ten-lap scored runs, with a 10.960-second best
+lap. See [`residual-rl-sub12-2026-09-30.md`](residual-rl-sub12-2026-09-30.md).
+
 Later update: a resumed v2 checkpoint completed ten scored laps with zero
 collisions or penalties (12.726 s best, 127.571 s total). It remains slower
 than the separately proven sub-12-second classical driver. See

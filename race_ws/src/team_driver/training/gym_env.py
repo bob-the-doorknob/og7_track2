@@ -72,6 +72,7 @@ class AutoDriveResidualEnv(gym.Env):
         target_speed: float = 4.4,
         max_lateral_accel: float = 1.5,
         max_braking_decel: float = 2.0,
+        safety_max_deceleration: float = 2.0,
         safety_horizon: float = 5.5,
         max_range: float = 10.0,
         lookahead_min: float = 0.55,
@@ -94,6 +95,7 @@ class AutoDriveResidualEnv(gym.Env):
             raise ValueError("frame_skip, max_steps and episode_laps must be positive")
         if not all(math.isfinite(x) and x > 0.0 for x in (
                 target_speed, max_lateral_accel, max_braking_decel,
+                safety_max_deceleration,
                 safety_horizon, max_range,
                 sensor_timeout_s, off_course_m, lookahead_min,
                 lookahead_max)) or not math.isfinite(lookahead_speed_gain) or lookahead_speed_gain < 0:
@@ -154,6 +156,7 @@ class AutoDriveResidualEnv(gym.Env):
         )
         self.safety = LidarSafety(max_range=self.max_range,
                                   horizon=self.safety_horizon,
+                                  max_deceleration=safety_max_deceleration,
                                   max_steering_rad=MAX_STEERING_RAD)
         self.speed_controller = SpeedController(
             throttle_min=-1.0 if self.vehicle_limits is not None else -0.12,
@@ -376,7 +379,13 @@ class AutoDriveResidualEnv(gym.Env):
         if action.shape != (2,) or not np.all(np.isfinite(action)):
             raise ValueError("action must be two finite residual controls")
         action = np.clip(action, -1.0, 1.0)
-        old_state = self._state()
+        try:
+            old_state = self._state()
+        except ValueError as exc:
+            self._publish(0.0, 0.0)
+            self.done = True
+            return (self.previous_observation.copy(), REWARD_WEIGHTS["sensor_failure"],
+                    False, True, {"reason": "sensor_failure", "error": str(exc)})
         control = self._apply_action(old_state, action, self.frame_skip / 40.0)
         try:
             self._wait_for_frames(self.frame_skip)
