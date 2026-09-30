@@ -35,6 +35,8 @@ OBSERVATION_DIM_V2 = LIDAR_SECTORS + 10
 MAX_STEERING_DELTA = 0.15
 MIN_SPEED_MULTIPLIER = 0.70
 MAX_SPEED_MULTIPLIER = 1.20
+STACKED_STEERING_SCALE = 1.0 / 3.0
+STACKED_SPEED_SCALE = 0.5
 _SHAPES = {
     "w0": (64, OBSERVATION_DIM), "b0": (64,),
     "w1": (64, 64), "b1": (64,),
@@ -124,6 +126,18 @@ def decode_action(raw_action) -> tuple[float, float]:
         1.0 + speed_control * (1.0 - MIN_SPEED_MULTIPLIER)
     )
     return steering_delta, speed_multiplier
+
+
+def scale_stacked_adjustment(steering_delta: float,
+                             speed_multiplier: float,
+                             steering_scale: float = STACKED_STEERING_SCALE,
+                             speed_scale: float = STACKED_SPEED_SCALE) -> tuple[float, float]:
+    """Keep a second residual smaller than the proven first-stage action."""
+    if not all(np.isfinite(value) and 0.0 <= value <= 1.0 for value in
+               (steering_scale, speed_scale)):
+        raise ValueError("stacked action scales must be finite and within [0, 1]")
+    return (steering_delta * steering_scale,
+            1.0 + (speed_multiplier - 1.0) * speed_scale)
 
 
 class ResidualPolicy:

@@ -27,6 +27,7 @@ from team_driver.residual_policy import (
     MODEL_FORMAT_VERSION, MODEL_FORMAT_VERSION_V2,
     OBSERVATION_DIM, OBSERVATION_DIM_V2,
     OBSERVATION_VERSION, OBSERVATION_VERSION_V2,
+    STACKED_STEERING_SCALE, STACKED_SPEED_SCALE,
     ResidualPolicy, decode_action,
 )
 from training.gym_env import AutoDriveResidualEnv, REWARD_WEIGHTS
@@ -179,7 +180,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--planning-lateral-mps2", type=float, default=0.0)
     parser.add_argument("--planning-top-speed-mps", type=float, default=0.0)
     parser.add_argument("--observation-version", type=int, choices=(1, 2), default=1)
-    parser.add_argument("--output-dir", type=Path, default=Path("training/runs"))
+    parser.add_argument("--output-dir", type=Path,
+                        default=Path(__file__).resolve().parent / "runs")
     parser.add_argument("--run-id", help="directory name; defaults to UTC time and seed")
     parser.add_argument("--resume", type=Path,
                         help="SAC checkpoint to continue from with a fresh replay buffer")
@@ -187,6 +189,10 @@ def parse_args() -> argparse.Namespace:
                         help="load the classical driver's matching training settings")
     parser.add_argument("--base-policy-path", type=Path,
                         help="fixed actor whose output is the new residual's baseline")
+    parser.add_argument("--stacked-steering-scale", type=float,
+                        default=STACKED_STEERING_SCALE)
+    parser.add_argument("--stacked-speed-scale", type=float,
+                        default=STACKED_SPEED_SCALE)
     args = parser.parse_args()
     if args.baseline_config is not None:
         payload = yaml.safe_load(args.baseline_config.read_text(encoding="utf-8"))
@@ -240,6 +246,9 @@ def parse_args() -> argparse.Namespace:
         parser.error(f"resume checkpoint does not exist: {args.resume}")
     if args.base_policy_path is not None and not args.base_policy_path.is_file():
         parser.error(f"base policy does not exist: {args.base_policy_path}")
+    if not all(np.isfinite(value) and 0.0 <= value <= 1.0 for value in
+               (args.stacked_steering_scale, args.stacked_speed_scale)):
+        parser.error("stacked action scales must be within [0, 1]")
     return args
 
 
@@ -277,6 +286,8 @@ def main() -> None:
         "base_policy_path": str(args.base_policy_path.resolve()) if args.base_policy_path else None,
         "base_policy_sha256": (hashlib.sha256(args.base_policy_path.read_bytes()).hexdigest()
                                if args.base_policy_path else None),
+        "stacked_steering_scale": (args.stacked_steering_scale if args.base_policy_path else None),
+        "stacked_speed_scale": (args.stacked_speed_scale if args.base_policy_path else None),
         "replay_buffer_restored": False,
         "algorithm": "SAC", "actor_layers": [
             OBSERVATION_DIM_V2 if args.observation_version == 2 else OBSERVATION_DIM,
@@ -303,6 +314,8 @@ def main() -> None:
             planning_top_speed_mps=args.planning_top_speed_mps,
             observation_version=args.observation_version,
             base_policy_path=args.base_policy_path,
+            stacked_steering_scale=args.stacked_steering_scale,
+            stacked_speed_scale=args.stacked_speed_scale,
         )
         settings["effective_target_speed_mps"] = env.target_speed
         settings["effective_lateral_mps2"] = env.max_lateral_accel

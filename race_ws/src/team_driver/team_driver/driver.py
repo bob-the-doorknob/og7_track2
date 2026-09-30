@@ -22,7 +22,7 @@ from visualization_msgs.msg import Marker, MarkerArray
 from team_driver.pure_pursuit import PurePursuit
 from team_driver.map_guard import MapGuard
 from team_driver.residual_policy import (ResidualPolicy, pack_observation,
-                                         pack_observation_v2)
+                                         pack_observation_v2, scale_stacked_adjustment)
 from team_driver.safety import LidarSafety
 from team_driver.speed_controller import SpeedController, control_dt
 from team_driver.speed_profile import SpeedProfile
@@ -75,6 +75,8 @@ class Driver(Node):
         self.declare_parameter('baseline_only', True)
         self.declare_parameter('policy_path', '')
         self.declare_parameter('base_policy_path', '')
+        self.declare_parameter('stacked_steering_scale', 1.0 / 3.0)
+        self.declare_parameter('stacked_speed_scale', 0.5)
         self.declare_parameter('safety_enabled', True)
         self.declare_parameter('safety_side_margin', 0.08)
         self.declare_parameter('safety_stop_margin', 0.25)
@@ -187,6 +189,11 @@ class Driver(Node):
         self.last_policy_warning = 0.0
         self.policy = None
         self.base_policy = None
+        self.stacked_steering_scale = float(self.get_parameter('stacked_steering_scale').value)
+        self.stacked_speed_scale = float(self.get_parameter('stacked_speed_scale').value)
+        if not all(math.isfinite(value) and 0.0 <= value <= 1.0 for value in
+                   (self.stacked_steering_scale, self.stacked_speed_scale)):
+            raise ValueError('stacked action scales must be finite and within [0, 1]')
 
         self._marker_divisor = 0
         if self.baseline_only:
@@ -225,6 +232,10 @@ class Driver(Node):
             except (OSError, KeyError, ValueError, zipfile.BadZipFile) as exc:
                 self.policy = None
                 self.base_policy = None
+                if configured_policy_path or configured_base_path:
+                    raise RuntimeError(
+                        f'Configured residual policy unavailable ({policy_path}: {exc})'
+                    ) from exc
                 self.get_logger().warn(
                     f'Residual policy unavailable ({policy_path}: {exc}); '
                     'running the classical baseline.'
@@ -330,6 +341,10 @@ class Driver(Node):
                 else:
                     base_steering, base_speed = baseline_steering, baseline_target_speed
                 steering_delta, speed_multiplier = self.policy.predict(observation)
+                if self.base_policy is not None:
+                    steering_delta, speed_multiplier = scale_stacked_adjustment(
+                        steering_delta, speed_multiplier,
+                        self.stacked_steering_scale, self.stacked_speed_scale)
                 steering = float(np.clip(base_steering + steering_delta, -1.0, 1.0))
                 target_speed = min(base_speed * speed_multiplier, self.target_speed)
             except ValueError as exc:

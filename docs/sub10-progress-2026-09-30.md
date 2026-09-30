@@ -52,12 +52,57 @@ collisions and 11.147 s best. The first learned second-stage checkpoint
 completed three clean scored laps at 11.544 s best, so it was not promoted.
 
 The stacked training environment had repeated off-course and collision
-episodes even during its zero-adjustment phase. The race driver updates on
-each LiDAR scan, while the training loop holds an action while the learner
-computes between steps. That control-rate mismatch is a plausible cause, not
-yet a proven root cause. Further stacked training should first keep the fixed
-base policy publishing at the race control rate and let learning update only
-the second-stage action.
+episodes after random exploration began. A separate zero-action probe stayed
+on course for 1,000 updates, with exactly one LiDAR frame per update and
+cross-track error below the 0.70 m training cutoff. This narrows the problem
+to exploration or learning after the warmup phase. The second-stage action
+was reduced to one third of the normal steering adjustment and half of the
+speed adjustment; its first checkpoint still had off-course training episodes.
+That checkpoint scored three timed laps with zero collisions and penalties,
+but only **11.177 s** best. It was not promoted.
+
+I made the stacked steering and speed ranges configurable, with the same
+settings passed to training and the race driver. A tighter seed-54 run used
+0.1 steering scale and 0.25 speed scale. It completed two laps during training
+but also repeatedly went off-course at the same bends. All three exported
+checkpoints completed clean three-lap referee runs:
+
+| Seed-54 checkpoint | Best timed lap | Three-lap total | Collisions/penalties |
+| --- | ---: | ---: | ---: |
+| 1,000 steps | 11.031 s | 33.554 s | 0/0 |
+| 2,000 steps | 11.272 s | 33.853 s | 0/0 |
+| 3,000 steps | 11.200 s | 33.813 s | 0/0 |
+
+The closest, 1,000-step actor then completed a full ten-lap scored run with
+zero collisions and penalties: **11.021 s best**, **112.301 s total**. The
+selected actor's earlier ten-lap best and total remain better at 10.9598 s
+and 111.841 s, so the stacked actor remains experimental.
+
+The seed-55 speed-only experiment fixed second-stage steering at zero and
+used 0.5 speed scale. It completed a lap after exploration began, then its
+training episodes deteriorated into repeated collisions and off-course exits.
+I stopped it at 1,347 steps. Its 1,000-step actor completed three clean scored
+laps at **11.326 s best** and **34.175 s total**. None of these checkpoints
+beats the selected actor, so none was promoted. Their checkpoint directories
+remain local under `race_ws/src/team_driver/training/runs/`.
+
+One first attempt to score seed-54 pointed at the wrong checkpoint directory;
+the driver logged that it had fallen back to the classical controller. I
+stopped and excluded that run, then corrected the path and scored the actor.
+The race driver now fails to start when an explicitly configured actor is
+missing, and the trainer's default output directory is anchored to its own
+`training/runs/` directory.
+
+After the fail-fast change, the unchanged selected actor loaded and completed
+another clean three-lap scored run (11.323 s best, 34.229 s total). The
+seed-54 and seed-55 scored JSON files and this check are in
+`results/submitted/`.
+
+The speed-only run's failures after gradient updates suggest the training
+environment may hold a previously published steering command while SAC
+computes. The zero-action probe did not include those gradient updates, so it
+does not rule out this timing problem. Further training should keep the fixed
+actor controlling the car on each LiDAR scan while learning runs separately.
 
 ## Measured bottleneck
 

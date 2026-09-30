@@ -30,7 +30,7 @@ from team_driver.map_guard import MapGuard
 from team_driver.pure_pursuit import PurePursuit
 from team_driver.residual_policy import (OBSERVATION_DIM, OBSERVATION_DIM_V2,
                                          ResidualPolicy, decode_action, pack_observation,
-                                         pack_observation_v2)
+                                         pack_observation_v2, scale_stacked_adjustment)
 from team_driver.safety import LidarSafety
 from team_driver.speed_controller import SpeedController
 from team_driver.speed_profile import SpeedProfile
@@ -71,6 +71,8 @@ class AutoDriveResidualEnv(gym.Env):
         planning_top_speed_mps: float = 0.0,
         observation_version: int = 1,
         base_policy_path: str | Path | None = None,
+        stacked_steering_scale: float = 1.0 / 3.0,
+        stacked_speed_scale: float = 0.5,
         target_speed: float = 4.4,
         max_lateral_accel: float = 1.5,
         max_braking_decel: float = 2.0,
@@ -127,6 +129,11 @@ class AutoDriveResidualEnv(gym.Env):
         self.off_course_m = float(off_course_m)
         self.observation_version = int(observation_version)
         self.base_policy = ResidualPolicy.load(base_policy_path) if base_policy_path else None
+        self.stacked_steering_scale = float(stacked_steering_scale)
+        self.stacked_speed_scale = float(stacked_speed_scale)
+        if not all(math.isfinite(value) and 0.0 <= value <= 1.0 for value in
+                   (self.stacked_steering_scale, self.stacked_speed_scale)):
+            raise ValueError("stacked action scales must be finite and within [0, 1]")
         if self.base_policy is not None and self.base_policy.observation_version != self.observation_version:
             raise ValueError("base policy observation version differs from training environment")
         observation_dim = (OBSERVATION_DIM_V2 if observation_version == 2
@@ -309,6 +316,10 @@ class AutoDriveResidualEnv(gym.Env):
             base_steering = state["baseline_steering"]
             base_speed = state["baseline_speed"]
         steering_delta, speed_multiplier = decode_action(action)
+        if self.base_policy is not None:
+            steering_delta, speed_multiplier = scale_stacked_adjustment(
+                steering_delta, speed_multiplier,
+                self.stacked_steering_scale, self.stacked_speed_scale)
         proposed_steering = float(np.clip(
             base_steering + steering_delta, -1.0, 1.0))
         proposed_speed = min(base_speed * speed_multiplier,
