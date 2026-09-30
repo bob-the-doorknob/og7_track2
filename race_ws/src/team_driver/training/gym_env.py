@@ -11,6 +11,7 @@ must match the actual executable.
 from __future__ import annotations
 
 import math
+import threading
 import time
 from pathlib import Path
 
@@ -71,6 +72,7 @@ class AutoDriveResidualEnv(gym.Env):
         planning_top_speed_mps: float = 0.0,
         observation_version: int = 1,
         base_policy_path: str | Path | None = None,
+        continuous_control: bool = False,
         stacked_steering_scale: float = 1.0 / 3.0,
         stacked_speed_scale: float = 0.5,
         target_speed: float = 4.4,
@@ -225,29 +227,66 @@ class AutoDriveResidualEnv(gym.Env):
         self.start_collisions = 0
         self.steps = 0
         self.done = True
+        self.continuous_control = bool(continuous_control)
+        self._telemetry_lock = threading.RLock()
+        self.active_action = np.zeros(2, dtype=np.float32)
+        self.latest_control: dict | None = None
+        self.control_error: str | None = None
+        self.control_stop = threading.Event()
+        self.control_thread: threading.Thread | None = None
+        if self.continuous_control:
+            self.control_thread = threading.Thread(
+                target=self._continuous_spin, name="autodrive_training_control",
+                daemon=True)
+            self.control_thread.start()
+
+    def _continuous_spin(self) -> None:
+        """Keep the fixed actor driving while SAC computes between steps."""
+        while not self.control_stop.is_set():
+            try:
+                self.executor.spin_once(timeout_sec=0.01)
+            except Exception as exc:
+                with self._telemetry_lock:
+                    self.control_error = f"continuous ROS control failed: {exc}"
+                    self.done = True
+                    self._publish(0.0, 0.0)
+                return
 
     def _on_scan(self, msg: LaserScan) -> None:
-        self.scan_ranges = np.asarray(msg.ranges, dtype=np.float64)
-        self.scan_angles = (msg.angle_min +
-                            np.arange(len(msg.ranges), dtype=np.float64) *
-                            msg.angle_increment)
-        self.scan_seq += 1
+        with self._telemetry_lock:
+            self.scan_ranges = np.asarray(msg.ranges, dtype=np.float64)
+            self.scan_angles = (msg.angle_min +
+                                np.arange(len(msg.ranges), dtype=np.float64) *
+                                msg.angle_increment)
+            if self.continuous_control and not self.done and self._telemetry_ready():
+                try:
+                    state = self._state()
+                    self.latest_control = self._apply_action(
+                        state, self.active_action, 1.0 / 40.0)
+                except Exception as exc:
+                    self.control_error = f"continuous control failed: {exc}"
+                    self.done = True
+                    self._publish(0.0, 0.0)
+            self.scan_seq += 1
 
     def _on_odom(self, msg: Odometry) -> None:
         point = msg.pose.pose.position
         q = msg.pose.pose.orientation
-        self.position = (point.x, point.y)
-        self.yaw = math.atan2(2.0 * (q.w * q.z + q.x * q.y),
-                              1.0 - 2.0 * (q.y * q.y + q.z * q.z))
-        self.speed = math.hypot(msg.twist.twist.linear.x,
-                                msg.twist.twist.linear.y)
-        self.odom_received_at = time.monotonic()
+        with self._telemetry_lock:
+            self.position = (point.x, point.y)
+            self.yaw = math.atan2(2.0 * (q.w * q.z + q.x * q.y),
+                                  1.0 - 2.0 * (q.y * q.y + q.z * q.z))
+            self.speed = math.hypot(msg.twist.twist.linear.x,
+                                    msg.twist.twist.linear.y)
+            self.odom_received_at = time.monotonic()
 
     def _on_collision(self, msg: Int32) -> None:
-        self.collision_count = int(msg.data)
+        with self._telemetry_lock:
+            self.collision_count = int(msg.data)
 
     def _on_lap(self, msg: Int32) -> None:
-        self.lap_count = int(msg.data)
+        with self._telemetry_lock:
+            self.lap_count = int(msg.data)
 
     def _guard_practice(self) -> None:
         """Refuse to drive or reset if referee or another driver is present."""
@@ -258,13 +297,22 @@ class AutoDriveResidualEnv(gym.Env):
             raise RuntimeError("another driver is publishing commands; stop it first")
 
     def _wait_for_frames(self, count: int) -> None:
-        target = self.scan_seq + count
+        with self._telemetry_lock:
+            target = self.scan_seq + count
         deadline = time.monotonic() + self.sensor_timeout_s
-        while self.scan_seq < target or not self._telemetry_ready():
+        while True:
+            with self._telemetry_lock:
+                if self.control_error is not None:
+                    raise RuntimeError(self.control_error)
+                if self.scan_seq >= target and self._telemetry_ready():
+                    return
             remaining = deadline - time.monotonic()
             if remaining <= 0.0:
                 raise TimeoutError("AutoDRIVE LiDAR/odom/lap/collision telemetry timed out")
-            self.executor.spin_once(timeout_sec=min(remaining, 0.05))
+            if self.continuous_control:
+                time.sleep(min(remaining, 0.005))
+            else:
+                self.executor.spin_once(timeout_sec=min(remaining, 0.05))
 
     def _telemetry_ready(self) -> bool:
         return (self.scan_ranges is not None and self.position is not None and
@@ -273,6 +321,10 @@ class AutoDriveResidualEnv(gym.Env):
                 all(math.isfinite(x) for x in (*self.position, self.yaw, self.speed)))
 
     def _state(self) -> dict:
+        with self._telemetry_lock:
+            return self._state_unlocked()
+
+    def _state_unlocked(self) -> dict:
         if not self._telemetry_ready() or self.scan_ranges is None or self.scan_angles is None:
             raise ValueError("training telemetry is incomplete or stale")
         path = self.controller.path_state(self.position, self.yaw)
@@ -347,9 +399,15 @@ class AutoDriveResidualEnv(gym.Env):
               options: dict | None = None) -> tuple[np.ndarray, dict]:
         super().reset(seed=seed)
         # Give DDS a chance to discover a running referee or manual driver.
-        self.executor.spin_once(timeout_sec=0.2)
+        if self.continuous_control:
+            time.sleep(0.2)
+        else:
+            self.executor.spin_once(timeout_sec=0.2)
         self._guard_practice()
         self.done = True
+        self.active_action = np.zeros(2, dtype=np.float32)
+        self.latest_control = None
+        self.control_error = None
         self._publish(0.0, 0.0)
         # Match the referee's reset hold/settle timing. A single-frame pulse
         # can be lost by the websocket bridge, especially after a long drive.
@@ -357,13 +415,19 @@ class AutoDriveResidualEnv(gym.Env):
             deadline = time.monotonic() + 0.5
             while time.monotonic() < deadline:
                 self.reset_pub.publish(Bool(data=True))
-                self.executor.spin_once(timeout_sec=0.05)
+                if self.continuous_control:
+                    time.sleep(0.05)
+                else:
+                    self.executor.spin_once(timeout_sec=0.05)
         finally:
             # AutoDRIVE's reset is level-triggered: hold low through settling.
             deadline = time.monotonic() + 1.0
             while time.monotonic() < deadline:
                 self.reset_pub.publish(Bool(data=False))
-                self.executor.spin_once(timeout_sec=0.05)
+                if self.continuous_control:
+                    time.sleep(0.05)
+                else:
+                    self.executor.spin_once(timeout_sec=0.05)
 
         self._wait_for_frames(2)
         state = self._state()
@@ -390,6 +454,7 @@ class AutoDriveResidualEnv(gym.Env):
         self.done = False
         # Zero residual reproduces the classical or fixed-actor baseline.
         control = self._apply_action(state, self.previous_action, 0.025)
+        self.latest_control = control
         return self.previous_observation.copy(), dict(
             baseline_steering=state["baseline_steering"],
             baseline_target_speed=state["baseline_speed"], **control)
@@ -402,18 +467,27 @@ class AutoDriveResidualEnv(gym.Env):
         if action.shape != (2,) or not np.all(np.isfinite(action)):
             raise ValueError("action must be two finite residual controls")
         action = np.clip(action, -1.0, 1.0)
-        try:
-            old_state = self._state()
-        except ValueError as exc:
-            self._publish(0.0, 0.0)
-            self.done = True
-            return (self.previous_observation.copy(), REWARD_WEIGHTS["sensor_failure"],
-                    False, True, {"reason": "sensor_failure", "error": str(exc)})
-        control = self._apply_action(old_state, action, self.frame_skip / 40.0)
+        if self.continuous_control:
+            with self._telemetry_lock:
+                self.active_action = action.copy()
+        else:
+            try:
+                old_state = self._state()
+            except ValueError as exc:
+                self._publish(0.0, 0.0)
+                self.done = True
+                return (self.previous_observation.copy(), REWARD_WEIGHTS["sensor_failure"],
+                        False, True, {"reason": "sensor_failure", "error": str(exc)})
+            control = self._apply_action(old_state, action, self.frame_skip / 40.0)
         try:
             self._wait_for_frames(self.frame_skip)
             state = self._state()
-        except (TimeoutError, ValueError) as exc:
+            if self.continuous_control:
+                with self._telemetry_lock:
+                    control = self.latest_control
+                if control is None:
+                    raise RuntimeError("continuous controller has not published")
+        except (TimeoutError, ValueError, RuntimeError) as exc:
             self._publish(0.0, 0.0)
             self.done = True
             return (self.previous_observation.copy(), REWARD_WEIGHTS["sensor_failure"], False, True,
@@ -470,6 +544,11 @@ class AutoDriveResidualEnv(gym.Env):
         return state["observation"].copy(), reward, terminated, truncated, info
 
     def close(self) -> None:
+        if hasattr(self, "control_stop"):
+            self.done = True
+            self.control_stop.set()
+            if self.control_thread is not None:
+                self.control_thread.join(timeout=2.0)
         if hasattr(self, "node"):
             self._publish(0.0, 0.0)
             self.executor.shutdown()

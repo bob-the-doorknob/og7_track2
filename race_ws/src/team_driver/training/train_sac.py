@@ -189,6 +189,8 @@ def parse_args() -> argparse.Namespace:
                         help="load the classical driver's matching training settings")
     parser.add_argument("--base-policy-path", type=Path,
                         help="fixed actor whose output is the new residual's baseline")
+    parser.add_argument("--continuous-control", action="store_true",
+                        help="update the fixed actor on every LiDAR frame while SAC learns")
     parser.add_argument("--stacked-steering-scale", type=float,
                         default=STACKED_STEERING_SCALE)
     parser.add_argument("--stacked-speed-scale", type=float,
@@ -284,6 +286,7 @@ def main() -> None:
         "observation_version": args.observation_version,
         "resumed_from": str(args.resume.resolve()) if args.resume else None,
         "base_policy_path": str(args.base_policy_path.resolve()) if args.base_policy_path else None,
+        "continuous_control": args.continuous_control,
         "base_policy_sha256": (hashlib.sha256(args.base_policy_path.read_bytes()).hexdigest()
                                if args.base_policy_path else None),
         "stacked_steering_scale": (args.stacked_steering_scale if args.base_policy_path else None),
@@ -314,6 +317,7 @@ def main() -> None:
             planning_top_speed_mps=args.planning_top_speed_mps,
             observation_version=args.observation_version,
             base_policy_path=args.base_policy_path,
+            continuous_control=args.continuous_control,
             stacked_steering_scale=args.stacked_steering_scale,
             stacked_speed_scale=args.stacked_speed_scale,
         )

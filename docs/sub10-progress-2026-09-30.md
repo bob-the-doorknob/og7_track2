@@ -104,6 +104,29 @@ computes. The zero-action probe did not include those gradient updates, so it
 does not rule out this timing problem. Further training should keep the fixed
 actor controlling the car on each LiDAR scan while learning runs separately.
 
+## Continuous-control training follow-up
+
+An opt-in `--continuous-control` training mode now keeps the fixed actor
+updating on each LiDAR scan while SAC computes between decisions. Seed 56 used
+speed-only adjustments. After several early off-course episodes, it completed
+eleven consecutive training laps without collisions. The 1,000-step actor
+scored three clean laps at 11.068 s best and 33.305 s total, but its full
+ten-lap run was slower: 11.171 s best and 113.588 s total. The 2,000-step
+and final actors scored 11.144 s and 11.355 s best over three clean laps.
+
+Seed 57 allowed small steering and speed adjustments. It completed many
+training laps without collisions, with a few off-course terminations. Its
+1,000-, 2,000-, and final-step actors each completed three clean scored laps
+at 11.211 s, 10.995 s, and 11.367 s best respectively. The 2,000-step actor
+was the closest new pilot, but its 33.592 s three-lap total did not establish
+an improvement over the selected actor. Its ten-lap validation was stopped at
+the user's request after three timed laps, so that run is **ABORTED and
+unscored**. None of these actors was promoted.
+
+The selected actor remains `residual_policy_v2_sub12_candidate.npz` with
+`fast_corner_24_residual_v2_sub12_params.yaml`: its saved clean ten-lap best
+is 10.9598 s and total is 111.841 s. No sub-10 lap was measured.
+
 ## Measured bottleneck
 
 A local scored trace of the selected driver showed a peak speed of about
