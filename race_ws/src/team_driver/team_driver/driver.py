@@ -74,6 +74,7 @@ class Driver(Node):
         self.declare_parameter('control_dt_mode', 'wall')
         self.declare_parameter('baseline_only', True)
         self.declare_parameter('policy_path', '')
+        self.declare_parameter('base_policy_path', '')
         self.declare_parameter('safety_enabled', True)
         self.declare_parameter('safety_side_margin', 0.08)
         self.declare_parameter('safety_stop_margin', 0.25)
@@ -185,14 +186,26 @@ class Driver(Node):
         self.last_safety_warning = 0.0
         self.last_policy_warning = 0.0
         self.policy = None
+        self.base_policy = None
 
         self._marker_divisor = 0
         if self.baseline_only:
             self.get_logger().info('Residual policy disabled; running the classical baseline.')
         else:
             configured_policy_path = str(self.get_parameter('policy_path').value).strip()
+            configured_base_path = str(self.get_parameter('base_policy_path').value).strip()
             policy_path = None
             try:
+                if configured_base_path:
+                    if configured_base_path.startswith('packaged:'):
+                        actor_name = configured_base_path.removeprefix('packaged:')
+                        if not actor_name.endswith('.npz') or Path(actor_name).name != actor_name:
+                            raise ValueError('packaged base policy must be an npz filename')
+                        base_path = Path(get_package_share_directory('team_driver')) / 'weights' / actor_name
+                    else:
+                        base_path = Path(configured_base_path)
+                    self.base_policy = ResidualPolicy.load(base_path)
+                    self.get_logger().info(f'Loaded base residual policy from {base_path}')
                 if configured_policy_path.startswith('packaged:'):
                     actor_name = configured_policy_path.removeprefix('packaged:')
                     if (not actor_name.endswith('.npz') or
@@ -205,8 +218,13 @@ class Driver(Node):
                                    Path(get_package_share_directory('team_driver')) /
                                    'weights' / 'residual_policy.npz')
                 self.policy = ResidualPolicy.load(policy_path)
+                if (self.base_policy is not None and
+                        self.base_policy.observation_version != self.policy.observation_version):
+                    raise ValueError('stacked policy observation versions differ')
                 self.get_logger().info(f'Loaded residual policy from {policy_path}')
             except (OSError, KeyError, ValueError, zipfile.BadZipFile) as exc:
+                self.policy = None
+                self.base_policy = None
                 self.get_logger().warn(
                     f'Residual policy unavailable ({policy_path}: {exc}); '
                     'running the classical baseline.'
@@ -305,11 +323,15 @@ class Driver(Node):
                         path_state.upcoming_curvature, baseline_steering,
                         baseline_target_speed, self.max_range,
                     )
+                if self.base_policy is not None:
+                    base_delta, base_multiplier = self.base_policy.predict(observation)
+                    base_steering = float(np.clip(baseline_steering + base_delta, -1.0, 1.0))
+                    base_speed = min(baseline_target_speed * base_multiplier, self.target_speed)
+                else:
+                    base_steering, base_speed = baseline_steering, baseline_target_speed
                 steering_delta, speed_multiplier = self.policy.predict(observation)
-                steering = float(np.clip(baseline_steering + steering_delta, -1.0, 1.0))
-                target_speed = min(
-                    baseline_target_speed * speed_multiplier, self.target_speed
-                )
+                steering = float(np.clip(base_steering + steering_delta, -1.0, 1.0))
+                target_speed = min(base_speed * speed_multiplier, self.target_speed)
             except ValueError as exc:
                 steering, target_speed = baseline_steering, baseline_target_speed
                 if time.monotonic() - self.last_policy_warning > 5.0:

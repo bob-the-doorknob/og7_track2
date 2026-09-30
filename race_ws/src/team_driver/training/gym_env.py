@@ -29,7 +29,7 @@ from team_driver.driver import MAX_STEERING_RAD, devkit_qos
 from team_driver.map_guard import MapGuard
 from team_driver.pure_pursuit import PurePursuit
 from team_driver.residual_policy import (OBSERVATION_DIM, OBSERVATION_DIM_V2,
-                                         decode_action, pack_observation,
+                                         ResidualPolicy, decode_action, pack_observation,
                                          pack_observation_v2)
 from team_driver.safety import LidarSafety
 from team_driver.speed_controller import SpeedController
@@ -51,8 +51,9 @@ class AutoDriveResidualEnv(gym.Env):
     """One residual action per ``frame_skip`` LiDAR frames, using ROS topics.
 
     Actions are the two raw policy outputs in [-1, 1]. Zero means the measured
-    classical controller. Observations use the selected version of the same
-    packer as the race driver. Each instance owns its own ROS context.
+    classical controller, or the fixed base policy when one is provided.
+    Observations use the same packer as the race driver. Each instance owns
+    its own ROS context.
     """
 
     metadata = {"render_modes": []}
@@ -69,6 +70,7 @@ class AutoDriveResidualEnv(gym.Env):
         planning_lateral_mps2: float = 0.0,
         planning_top_speed_mps: float = 0.0,
         observation_version: int = 1,
+        base_policy_path: str | Path | None = None,
         target_speed: float = 4.4,
         max_lateral_accel: float = 1.5,
         max_braking_decel: float = 2.0,
@@ -124,6 +126,9 @@ class AutoDriveResidualEnv(gym.Env):
         self.sensor_timeout_s = float(sensor_timeout_s)
         self.off_course_m = float(off_course_m)
         self.observation_version = int(observation_version)
+        self.base_policy = ResidualPolicy.load(base_policy_path) if base_policy_path else None
+        if self.base_policy is not None and self.base_policy.observation_version != self.observation_version:
+            raise ValueError("base policy observation version differs from training environment")
         observation_dim = (OBSERVATION_DIM_V2 if observation_version == 2
                            else OBSERVATION_DIM)
         self.observation_space = gym.spaces.Box(
@@ -296,10 +301,17 @@ class AutoDriveResidualEnv(gym.Env):
         self.throttle_pub.publish(Float32(data=float(np.clip(throttle, -1.0, 1.0))))
 
     def _apply_action(self, state: dict, action: np.ndarray, dt: float) -> dict:
+        if self.base_policy is not None:
+            base_delta, base_multiplier = self.base_policy.predict(state["observation"])
+            base_steering = float(np.clip(state["baseline_steering"] + base_delta, -1.0, 1.0))
+            base_speed = min(state["baseline_speed"] * base_multiplier, self.target_speed)
+        else:
+            base_steering = state["baseline_steering"]
+            base_speed = state["baseline_speed"]
         steering_delta, speed_multiplier = decode_action(action)
         proposed_steering = float(np.clip(
-            state["baseline_steering"] + steering_delta, -1.0, 1.0))
-        proposed_speed = min(state["baseline_speed"] * speed_multiplier,
+            base_steering + steering_delta, -1.0, 1.0))
+        proposed_speed = min(base_speed * speed_multiplier,
                              self.target_speed)
         map_certified = (self.map_guard is not None and
                          self.map_guard.certifies_clear_horizon(
@@ -365,7 +377,7 @@ class AutoDriveResidualEnv(gym.Env):
         self.start_laps = int(state["lap_count"])
         self.steps = 0
         self.done = False
-        # Zero residual exactly reproduces the measured baseline controls.
+        # Zero residual reproduces the classical or fixed-actor baseline.
         control = self._apply_action(state, self.previous_action, 0.025)
         return self.previous_observation.copy(), dict(
             baseline_steering=state["baseline_steering"],

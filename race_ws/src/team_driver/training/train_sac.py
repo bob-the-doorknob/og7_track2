@@ -185,6 +185,8 @@ def parse_args() -> argparse.Namespace:
                         help="SAC checkpoint to continue from with a fresh replay buffer")
     parser.add_argument("--baseline-config", type=Path,
                         help="load the classical driver's matching training settings")
+    parser.add_argument("--base-policy-path", type=Path,
+                        help="fixed actor whose output is the new residual's baseline")
     args = parser.parse_args()
     if args.baseline_config is not None:
         payload = yaml.safe_load(args.baseline_config.read_text(encoding="utf-8"))
@@ -236,6 +238,8 @@ def parse_args() -> argparse.Namespace:
         parser.error("practice training needs --centerline for the practice map")
     if args.resume is not None and not args.resume.is_file():
         parser.error(f"resume checkpoint does not exist: {args.resume}")
+    if args.base_policy_path is not None and not args.base_policy_path.is_file():
+        parser.error(f"base policy does not exist: {args.base_policy_path}")
     return args
 
 
@@ -270,6 +274,9 @@ def main() -> None:
         "planning_top_speed_mps": args.planning_top_speed_mps,
         "observation_version": args.observation_version,
         "resumed_from": str(args.resume.resolve()) if args.resume else None,
+        "base_policy_path": str(args.base_policy_path.resolve()) if args.base_policy_path else None,
+        "base_policy_sha256": (hashlib.sha256(args.base_policy_path.read_bytes()).hexdigest()
+                               if args.base_policy_path else None),
         "replay_buffer_restored": False,
         "algorithm": "SAC", "actor_layers": [
             OBSERVATION_DIM_V2 if args.observation_version == 2 else OBSERVATION_DIM,
@@ -295,6 +302,7 @@ def main() -> None:
             planning_lateral_mps2=args.planning_lateral_mps2,
             planning_top_speed_mps=args.planning_top_speed_mps,
             observation_version=args.observation_version,
+            base_policy_path=args.base_policy_path,
         )
         settings["effective_target_speed_mps"] = env.target_speed
         settings["effective_lateral_mps2"] = env.max_lateral_accel
