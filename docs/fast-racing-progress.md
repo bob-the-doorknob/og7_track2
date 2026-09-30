@@ -1,5 +1,11 @@
 # Faster racing experiments
 
+Update, 30 September 2026: a separate classical config completed two clean
+ten-lap scored runs with every lap below 12 seconds. See
+[`sub12-racing-2026-09-30.md`](sub12-racing-2026-09-30.md) for the selected
+config and unedited referee evidence. The historical experiments below remain
+as recorded.
+
 The 4.4 m/s residual RL driver remains the default in `driver_params.yaml`.
 The new classical candidate is selectable with
 `config/fast_baseline_params.yaml`; it uses the same generated racing line,

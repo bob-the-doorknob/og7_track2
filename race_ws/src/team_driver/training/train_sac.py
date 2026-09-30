@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import time
 from datetime import datetime, timezone
@@ -122,6 +123,8 @@ class RunRecorder(BaseCallback):
         name = label or f"step_{step:07d}"
         checkpoint = self.run_dir / name
         self.model.save(str(checkpoint.with_suffix(".zip")))
+        if label in ("final", "interrupted"):
+            self.model.save_replay_buffer(str(checkpoint.with_suffix(".replay.pkl")))
         export_actor(self.model, checkpoint.with_suffix(".npz"))
         metadata = {
             **self.settings,
@@ -158,28 +161,42 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--baseline-steps", type=int, default=500)
     parser.add_argument("--checkpoint-every", type=int, default=2000)
     parser.add_argument("--frame-skip", type=int, default=4)
-    parser.add_argument("--max-episode-steps", type=int, default=500)
+    parser.add_argument("--max-episode-steps", type=int,
+                        help="defaults to 2,000 simulator frames per episode")
+    parser.add_argument("--lookahead-min", type=float, default=0.55)
+    parser.add_argument("--lookahead-max", type=float, default=1.8)
+    parser.add_argument("--lookahead-speed-gain", type=float, default=0.35)
     parser.add_argument("--target-speed", type=float, default=4.4)
     parser.add_argument("--max-lateral-accel", type=float, default=1.5)
     parser.add_argument("--max-braking-decel", type=float, default=2.0)
     parser.add_argument("--safety-horizon", type=float, default=5.5)
     parser.add_argument("--vehicle-limits-path", type=Path)
+    parser.add_argument("--map-guard-path",
+                        help="packaged, or the map YAML path used by the race driver")
     parser.add_argument("--planning-lateral-mps2", type=float, default=0.0)
     parser.add_argument("--planning-top-speed-mps", type=float, default=0.0)
     parser.add_argument("--observation-version", type=int, choices=(1, 2), default=1)
     parser.add_argument("--output-dir", type=Path, default=Path("training/runs"))
     parser.add_argument("--run-id", help="directory name; defaults to UTC time and seed")
+    parser.add_argument("--resume", type=Path,
+                        help="SAC checkpoint to continue from with a fresh replay buffer")
     args = parser.parse_args()
     if args.steps < 1 or args.baseline_steps < 1 or args.checkpoint_every < 1:
         parser.error("steps, baseline-steps and checkpoint-every must be positive")
     if args.baseline_steps >= args.steps:
         parser.error("baseline-steps must be less than total steps")
-    if args.frame_skip < 1 or args.max_episode_steps < 1:
+    if args.frame_skip < 1:
+        parser.error("frame-skip must be positive")
+    if args.max_episode_steps is None:
+        args.max_episode_steps = math.ceil(2000 / args.frame_skip)
+    if args.max_episode_steps < 1:
         parser.error("frame-skip and max-episode-steps must be positive")
     if not all(np.isfinite(value) and value > 0.0 for value in (
             args.target_speed, args.max_lateral_accel, args.max_braking_decel,
-            args.safety_horizon)):
+            args.safety_horizon, args.lookahead_min, args.lookahead_max)):
         parser.error("speed and acceleration limits must be finite and positive")
+    if args.lookahead_max < args.lookahead_min or not np.isfinite(args.lookahead_speed_gain) or args.lookahead_speed_gain < 0:
+        parser.error("lookahead bounds or gain are invalid")
     if (not np.isfinite(args.planning_lateral_mps2) or args.planning_lateral_mps2 < 0
             or not np.isfinite(args.planning_top_speed_mps)
             or args.planning_top_speed_mps < 0):
@@ -188,6 +205,8 @@ def parse_args() -> argparse.Namespace:
         parser.error("v2 training requires --vehicle-limits-path")
     if args.simulator_variant == "practice" and args.centerline is None:
         parser.error("practice training needs --centerline for the practice map")
+    if args.resume is not None and not args.resume.is_file():
+        parser.error(f"resume checkpoint does not exist: {args.resume}")
     return args
 
 
@@ -205,14 +224,20 @@ def main() -> None:
         "requested_steps": args.steps, "baseline_steps": args.baseline_steps,
         "checkpoint_every": args.checkpoint_every, "frame_skip": args.frame_skip,
         "max_episode_steps": args.max_episode_steps,
+        "lookahead_min": args.lookahead_min,
+        "lookahead_max": args.lookahead_max,
+        "lookahead_speed_gain": args.lookahead_speed_gain,
         "target_speed": args.target_speed,
         "max_lateral_accel": args.max_lateral_accel,
         "max_braking_decel": args.max_braking_decel,
         "safety_horizon": args.safety_horizon,
         "vehicle_limits_path": str(args.vehicle_limits_path.resolve()) if args.vehicle_limits_path else None,
+        "map_guard_path": args.map_guard_path,
         "planning_lateral_mps2": args.planning_lateral_mps2,
         "planning_top_speed_mps": args.planning_top_speed_mps,
         "observation_version": args.observation_version,
+        "resumed_from": str(args.resume.resolve()) if args.resume else None,
+        "replay_buffer_restored": False,
         "algorithm": "SAC", "actor_layers": [
             OBSERVATION_DIM_V2 if args.observation_version == 2 else OBSERVATION_DIM,
             64, 64, 2],
@@ -228,25 +253,43 @@ def main() -> None:
             max_lateral_accel=args.max_lateral_accel,
             max_braking_decel=args.max_braking_decel,
             safety_horizon=args.safety_horizon,
+            lookahead_min=args.lookahead_min,
+            lookahead_max=args.lookahead_max,
+            lookahead_speed_gain=args.lookahead_speed_gain,
             vehicle_limits_path=args.vehicle_limits_path,
+            map_guard_path=args.map_guard_path,
             planning_lateral_mps2=args.planning_lateral_mps2,
             planning_top_speed_mps=args.planning_top_speed_mps,
             observation_version=args.observation_version,
         )
         settings["effective_target_speed_mps"] = env.target_speed
         settings["effective_lateral_mps2"] = env.max_lateral_accel
-        model = ZeroStartSAC(
-            "MlpPolicy", env, policy_kwargs={"net_arch": {"pi": [64, 64], "qf": [64, 64]}},
-            learning_starts=args.baseline_steps, buffer_size=50000,
-            batch_size=64, train_freq=1, gradient_steps=1,
-            seed=args.seed, device="cpu", verbose=0,
-        )
-        with torch.no_grad():
-            model.policy.actor.mu.weight.zero_()
-            model.policy.actor.mu.bias.zero_()
+        if args.resume is None:
+            model = ZeroStartSAC(
+                "MlpPolicy", env, policy_kwargs={"net_arch": {"pi": [64, 64], "qf": [64, 64]}},
+                learning_starts=args.baseline_steps, buffer_size=50000,
+                batch_size=64, train_freq=1, gradient_steps=1,
+                seed=args.seed, device="cpu", verbose=0,
+            )
+            with torch.no_grad():
+                model.policy.actor.mu.weight.zero_()
+                model.policy.actor.mu.bias.zero_()
+        else:
+            model = ZeroStartSAC.load(args.resume, env=env, device="cpu")
+            if model.observation_space.shape != env.observation_space.shape:
+                raise ValueError("resume checkpoint observation shape differs from environment")
+            model.learning_starts = args.baseline_steps
+            model.set_random_seed(args.seed)
+            replay_path = args.resume.with_suffix(".replay.pkl")
+            if replay_path.is_file():
+                model.load_replay_buffer(str(replay_path))
+                settings["replay_buffer_restored"] = True
+            settings["checkpoint_start_timesteps"] = model.num_timesteps
+            print("Continuing checkpoint weights; replay buffer restored: "
+                  f"{settings['replay_buffer_restored']}", flush=True)
         recorder = RunRecorder(run_dir, settings, args.checkpoint_every)
         recorder.model = model
-        recorder.save_checkpoint(label="baseline")
+        recorder.save_checkpoint(label="resume_start" if args.resume else "baseline")
         model.learn(total_timesteps=args.steps, callback=recorder,
                     reset_num_timesteps=True, progress_bar=False)
         recorder.save_checkpoint(label="final")

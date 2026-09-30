@@ -26,6 +26,7 @@ from sensor_msgs.msg import LaserScan
 from std_msgs.msg import Bool, Float32, Int32
 
 from team_driver.driver import MAX_STEERING_RAD, devkit_qos
+from team_driver.map_guard import MapGuard
 from team_driver.pure_pursuit import PurePursuit
 from team_driver.residual_policy import (OBSERVATION_DIM, OBSERVATION_DIM_V2,
                                          decode_action, pack_observation,
@@ -36,10 +37,11 @@ from team_driver.speed_profile import SpeedProfile
 from team_driver.vehicle_limits import load_limits, planning_limits
 
 REWARD_WEIGHTS = {
-    "progress": 3.0, "cross_track": -0.02, "heading": -0.01,
-    "unsafe_speed": -0.04, "action_change": -0.03,
-    "rejected": -0.10, "collision": -10.0,
-    "off_course": -6.0, "lap_complete": 5.0,
+    "progress": 3.0, "cross_track": -0.10, "heading": -0.01,
+    "unsafe_speed": -0.10, "action_change": -0.03,
+    "action_magnitude": -0.12,
+    "rejected": -0.10, "collision": -50.0,
+    "off_course": -30.0, "lap_complete": 20.0,
     "sensor_failure": -2.0,
     "step_time": -0.02,
 }
@@ -63,6 +65,7 @@ class AutoDriveResidualEnv(gym.Env):
         vehicle_ns: str = "/autodrive/roboracer_1",
         centerline_path: str | Path | None = None,
         vehicle_limits_path: str | Path | None = None,
+        map_guard_path: str | Path | None = None,
         planning_lateral_mps2: float = 0.0,
         planning_top_speed_mps: float = 0.0,
         observation_version: int = 1,
@@ -71,6 +74,9 @@ class AutoDriveResidualEnv(gym.Env):
         max_braking_decel: float = 2.0,
         safety_horizon: float = 5.5,
         max_range: float = 10.0,
+        lookahead_min: float = 0.55,
+        lookahead_max: float = 1.8,
+        lookahead_speed_gain: float = 0.35,
         frame_skip: int = 4,
         max_steps: int = 500,
         episode_laps: int = 1,
@@ -89,7 +95,8 @@ class AutoDriveResidualEnv(gym.Env):
         if not all(math.isfinite(x) and x > 0.0 for x in (
                 target_speed, max_lateral_accel, max_braking_decel,
                 safety_horizon, max_range,
-                sensor_timeout_s, off_course_m)):
+                sensor_timeout_s, off_course_m, lookahead_min,
+                lookahead_max)) or not math.isfinite(lookahead_speed_gain) or lookahead_speed_gain < 0:
             raise ValueError("training speed, limits and timeout must be finite and positive")
 
         self.target_speed = float(target_speed)
@@ -130,7 +137,15 @@ class AutoDriveResidualEnv(gym.Env):
         if centerline_path is None:
             centerline_path = (Path(get_package_share_directory("team_driver")) /
                                "maps" / "icra26_compete_racing_line.csv")
-        self.controller = PurePursuit(centerline_path)
+        self.controller = PurePursuit(
+            centerline_path, lookahead_min=lookahead_min,
+            lookahead_max=lookahead_max,
+            lookahead_speed_gain=lookahead_speed_gain,
+        )
+        if map_guard_path == "packaged":
+            map_guard_path = (Path(get_package_share_directory("team_driver")) /
+                              "maps" / "icra26_compete.yaml")
+        self.map_guard = MapGuard(map_guard_path, self.controller) if map_guard_path else None
         self.speed_profile = SpeedProfile(
             self.controller, straight_speed=self.target_speed,
             max_lateral_accel=self.max_lateral_accel,
@@ -283,6 +298,9 @@ class AutoDriveResidualEnv(gym.Env):
             state["baseline_steering"] + steering_delta, -1.0, 1.0))
         proposed_speed = min(state["baseline_speed"] * speed_multiplier,
                              self.target_speed)
+        map_certified = (self.map_guard is not None and
+                         self.map_guard.certifies_clear_horizon(
+                             self.position, self.yaw, self.speed, proposed_steering))
         decision = self.safety.apply(
             self.scan_ranges, self.scan_angles,
             baseline_steering=state["baseline_steering"],
@@ -290,6 +308,7 @@ class AutoDriveResidualEnv(gym.Env):
             proposed_steering=proposed_steering,
             proposed_target_speed=proposed_speed,
             speed_ceiling=self.target_speed,
+            clear_horizon_certified=map_certified,
         )
         throttle = self.speed_controller.command(
             decision.target_speed, state["speed"], dt)
@@ -387,6 +406,8 @@ class AutoDriveResidualEnv(gym.Env):
             heading=REWARD_WEIGHTS["heading"] * abs(path.heading_error),
             unsafe_speed=REWARD_WEIGHTS["unsafe_speed"] * overspeed,
             action_change=REWARD_WEIGHTS["action_change"] * change,
+            action_magnitude=REWARD_WEIGHTS["action_magnitude"]
+            * float(np.linalg.norm(action)),
             rejected=REWARD_WEIGHTS["rejected"] if control["safety_rejected"] else 0.0,
             collision=REWARD_WEIGHTS["collision"] if collision else 0.0,
             off_course=REWARD_WEIGHTS["off_course"] if off_course else 0.0,

@@ -1,5 +1,11 @@
 # Fast-baseline residual RL, 30 September 2026
 
+Later update: a resumed v2 checkpoint completed ten scored laps with zero
+collisions or penalties (12.726 s best, 127.571 s total). It remains slower
+than the separately proven sub-12-second classical driver. See
+[`sub12-racing-2026-09-30.md`](sub12-racing-2026-09-30.md). The blocker below
+describes the earlier actor and simulator state during that experiment.
+
 The supplied MonacoF1 footage analysis describes a repeatable outside-apex-outside
 line, lookahead steering, curvature-dependent speed, braking before bends, and
 acceleration on exit. Those are useful racing principles, but the footage
