@@ -4,7 +4,9 @@
 
 The selected actor is `weights/residual_policy_v2_sub12_candidate.npz`
 (observation version 2). The bare driver and `config/driver_params.yaml` use
-the 18 m/s^2 profile with guarded exit preview. See
+the 18 m/s^2 profile with guarded exit preview and motion-based latency
+compensation. The current controls and Linux/Windows tests are recorded in
+`../../../../docs/headless-pace-2026-10-16.md`. See
 `../../../../docs/reproduce-selected-driver.md` for offline generation and
 training commands, reward details, and the limits of exact reproduction.
 See `../../../../docs/corner-exit-2026-10-16.md` for current scored comparisons.

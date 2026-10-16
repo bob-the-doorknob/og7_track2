@@ -10,7 +10,11 @@ bridge, and run `ros2 run team_driver driver`. All runtime assets are local.
 
 Current controller defaults: 7.2 m/s requested top speed, 18 m/s^2 empirical
 lateral planning allowance, guarded exit preview enabled with a 0.30 per m
-curvature gate, and the original throttle response. The actor was trained
+curvature gate, and the original throttle response. Coherent odometry,
+motion-based prediction, a predicted speed-profile query, and adaptive
+lookahead account for feedback delay; see `headless-pace-2026-10-16.md`.
+The explicit config is `fast_corner_18_residual_v2_latency_params.yaml`.
+The actor was trained
 before this controller tuning, with a 24 m/s^2 planning allowance.
 
 ## Regenerate the racing line

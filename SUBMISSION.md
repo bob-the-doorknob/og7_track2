@@ -30,13 +30,19 @@ The selected planning lateral allowance is 18 m/s^2, reduced from 24 to plan
 earlier braking at the tight hairpins. It was tuned after training the actor;
 the learned weights were not retrained or changed for this controller update.
 
+The controller keeps a coherent odometry pose and compensates for feedback
+delay using two measured motion intervals. Steering and speed-profile queries
+use that bounded predicted pose. The maximum lookahead grows by at most 0.3 m
+only at slower feedback rates. This correction was tested on Linux headless
+and Windows; see `docs/headless-pace-2026-10-16.md`.
+
 The selected actor is
 `race_ws/src/team_driver/weights/residual_policy_v2_sub12_candidate.npz`.
 Its SHA-256 is
 `e76d8b8baf50bf452c59fc00002fd6efda7aad0c21206302630a77654e9bbe22`.
 The selected controller settings are the defaults in both `driver.py` and
 `config/driver_params.yaml`; the explicit equivalent is
-`config/fast_corner_18_residual_v2_exit_preview_params.yaml`.
+`config/fast_corner_18_residual_v2_latency_params.yaml`.
 It was trained with residual SAC on the clean map72 classical driver. The
 recorded run resumed a v2 checkpoint and collected 4,000 further training
 steps with seed 50; the first 1,000 steps used the baseline action. The actor
@@ -64,8 +70,8 @@ is needed for the selected defaults.
 - **LiDAR:** used for path clearance and the safety speed limit; the residual
   policy also receives sector summaries.
 - **Pose and speed:** uses simulator odometry (`/odom`) for vehicle position,
-  heading, and speed. The `/ips` position feed can also update position; its
-  disagreement with odometry is logged for diagnostics.
+  heading, and speed as one control state. The `/ips` position feed is used
+  only for disagreement diagnostics and never overwrites the control pose.
 - **Camera, IMU, and encoders:** not used.
 
 The planner follows the packaged racing line and map guard for the
@@ -83,6 +89,36 @@ and braking limits with a friction ellipse. The 18 m/s^2 lateral allowance is
 an empirically tested planning setting, not a measured physical grip limit.
 
 ## Results on our own machine
+
+### Latest cross-platform correction
+
+The actor is unchanged. The corrected controls substantially reduce the
+headless gap, with two final Linux ten-lap totals of 117.3531 and 116.9162 s
+(mean 117.1347 s), versus 129.0319 and 133.3047 s with the original submission
+(mean 131.1683 s): **10.70% faster**. All forty timed laps had zero collisions.
+The final Windows cross-check preserved local pace at 110.9386 s with zero
+collisions. These are local results, not the organisers' score.
+
+| Run | Platform | Best lap | 10-lap total | Collisions |
+| --- | --- | ---: | ---: | ---: |
+| `linux_final_defaults_full_c` (bare defaults; trace-only override) | Linux headless | **11.4230 s** | **116.9162 s** | 0 |
+| `linux_final_candidate_full_b` (final settings, explicit flags) | Linux headless | 11.4880 s | 117.3531 s | 0 |
+| `windows_final_candidate_full_b` (final settings) | Windows native | **10.9938 s** | **110.9386 s** | 0 |
+| `linux_baseline_a` (original submission) | Linux headless | 12.3304 s | 129.0319 s | 0 |
+| `linux_original_full_b` (original submission, repeat) | Linux headless | 12.4224 s | 133.3047 s | 0 |
+
+Full-run Linux telemetry shows tracking-error p95 improving from 0.395 m to
+0.253 m and maximum error from 0.703 m to 0.416 m. Corner-exit median actual
+speed at racing-line arc 19–22 m improved from 3.899 to 5.367 m/s. The report
+includes rejected trials, commands, a plot, and clearance/smoothness limits.
+Original full-run referee JSONs are retained in `results/submitted/`.
+
+The earlier GitHub run loaded the right model but took 130.212 s. Its race
+completed; the workflow was cancelled during cache cleanup. Check the fork's
+Actions page for the correction's validation rather than treating that run
+as a green workflow or a final score.
+
+### Earlier Windows-only corner-exit comparison
 
 The 24 m/s^2 preview variants were rejected after a repeat reached a larger
 tracking excursion. The selected 18 m/s^2 profile with guarded preview completed
@@ -126,12 +162,15 @@ historical performance evidence. They predate the current driver changes:
 The selected runs recorded real-time factors of 0.666 and 0.670.
 The additional clean-clone run recorded 0.543.
 The final official-script run recorded 0.514.
+The corrected Linux tests recorded about 1.006–1.016; the final Windows
+cross-check recorded 0.673. Linux used the pinned official `2026-icra` compete
+simulator with headless graphics in an isolated ROS domain in Docker.
 The October comparison runs ranged from 0.458 to 0.698; the earlier pre-change
 run recorded 0.952. Simulator pacing varied during testing.
 
 | CPU | GPU | RAM | OS | Typical real-time factor |
 | --- | --- | --- | --- | --- |
-| Intel Core Ultra 7 255HX | NVIDIA GeForce RTX 5060 Laptop GPU (8 GB) | 16 GB (15.4 GiB visible) | Lenovo 83F3; Windows 25H2, build 26200, 64-bit (product label: Windows 10 Home Single Language) | 0.666-0.670 (selected runs); 0.458-0.698 in comparisons |
+| Intel Core Ultra 7 255HX | NVIDIA GeForce RTX 5060 Laptop GPU (8 GB) | 16 GB (15.4 GiB visible) | Lenovo 83F3; Windows 25H2, build 26200, 64-bit (product label: Windows 10 Home Single Language); Linux headless in ROS Humble Docker | About 1.01 (Linux headless); 0.673 (final Windows cross-check) |
 
 ## Anything precomputed
 
@@ -185,15 +224,21 @@ prepared to explain its behavior and the model-training process.
 
 ## Known issues
 
-- The selected controls have four complete ten-lap runs on this machine,
-  including a clean-source clone built in the existing container.
+- The latest controls have two final Linux ten-lap runs and a Windows
+  cross-check; the bare defaults were tested on Linux. Earlier comparisons
+  above use earlier controls and are labelled accordingly.
   Different simulator pacing or judging hardware may change the results.
-- Throttle switching is reduced in frequency at the exit, but individual
-  command jumps remain. Physical jerk has not been measured.
+- Individual command jumps remain. The corrected headless run does not
+  establish reduced braking frequency or physical jerk; jerk was not measured.
 - The geometric preview is deliberately excluded from tight turns; its model
   does not guarantee grip or yaw stability.
-- A newly rebuilt Docker image and headless Linux simulator have not been
-  tested; validation used the existing image and native Windows simulator.
+- Headless testing used the existing image. Follow the correction's GitHub
+  Judge run for fresh image validation. Cross-platform timing equivalence
+  and unchanged collision risk on other hardware are not guaranteed.
+- A sampled 0.215 m clearance-margin disk flagged 32/2413 corrected Linux
+  samples versus zero in the reference; a 0.135 m disk flagged zero in both.
+  This proxy is not a full oriented-footprint proof. Actual collisions were
+  zero and tracking error decreased; see the report for limits.
 
 ## Local preparation status
 
@@ -211,8 +256,9 @@ Prepared locally:
   branch present. Prepared submission branch: `submission/og7-track2`.
   It is published on that fork. Internal draft validation PR:
   `https://github.com/bob-the-doorknob/og7_track2/pull/1`.
-- The selected implementation and runtime assets are frozen in local commit
-  `8ac1d0f3335a6d90aca21679947ded24501b69ba`. Simulator binaries,
+- The corrected implementation is frozen in commit
+  `5dd751189e21984fb49949f8092d2d3865107b02`. The earlier published
+  `a24a8c0` remains the exact pre-correction rollback. Simulator binaries,
   build/install/log directories, and unrelated ZIP archives are excluded.
 - A local Git bundle of that commit was cloned into the container. The
   official integrity check passed all 64 protected files with no extra files;
@@ -226,6 +272,7 @@ Prepared locally:
   11.0458 s best lap, 111.0577 s total, zero collisions. The original result
   is `results/submitted/OG7__20261016T062854Z.json`.
 - The final review record is `docs/submission-review-2026-10-16.md`.
+  The latest controller evidence is `docs/headless-pace-2026-10-16.md`.
   Publication was authorised; the organisers' notification is pending.
 
 Check the Judge workflow, then provide the organisers with the repository URL

@@ -1,0 +1,18 @@
+{
+  "description": "LF-normalized source SHA256; actor hash is raw bytes",
+  "bare_default_run": "linux_final_defaults_full_c",
+  "hashes": {
+    "team_driver/__init__.py": "41652afbc19f5446d81f940a9b40dec30fdfc92e853c9b7a07d8e4f30131c7f6",
+    "team_driver/safety.py": "905261e21dd2593267e88cc5b02a0e236f47d36a37624bfc13e0a250451003d7",
+    "team_driver/speed_profile.py": "9518868089dcf4acf1cb322766e1203296b7701eefbb398c9ee5c840438643c3",
+    "team_driver/residual_policy.py": "e917f30d3536f999dae7ae6085b728f02216873d13ae4a97fed8e4dc9b2de963",
+    "team_driver/exit_preview.py": "7bc51a5dcb97d36cecc0891b710a46368726ba4824ae967e92dcbcfaa56b5e27",
+    "team_driver/map_guard.py": "b93a8b56f31cc555e5a575a027abce7f66dc4919f3f3e184dc9b6f0d11a25aef",
+    "team_driver/speed_controller.py": "359269cc552d1456201961ae35ab190d766f9c9315107c6fcd61854dfe3a9425",
+    "team_driver/pure_pursuit.py": "5944135d311cbed795066dd0abbdf6612815cf4222738146b8627a1f1064ee04",
+    "team_driver/diagnostics.py": "c9c5dca7a4f6eadfde4caab460ac3add8e34ea33914f785c9f0d4658674a7e17",
+    "team_driver/driver.py": "e3361e2592875e1d17d6ba88467d7074910a18df87b256c48a25f2e45ca45de0",
+    "team_driver/vehicle_limits.py": "3ca3ae781b5adcdfdce6f535f891ac0cae99fd534e16a4c5a63b16010b77310d",
+    "weights/residual_policy_v2_sub12_candidate.npz": "e76d8b8baf50bf452c59fc00002fd6efda7aad0c21206302630a77654e9bbe22"
+  }
+}

@@ -17,7 +17,30 @@ notification are pending. No merge or organiser notification has been performed.
   matched local commit `1019c257632d8db065a6d74ca75c34581856498e`.
   Internal validation PR: <https://github.com/bob-the-doorknob/og7_track2/pull/1>.
   GitHub Actions was enabled on the new fork before triggering validation.
-- Frozen implementation commit: `8ac1d0f3335a6d90aca21679947ded24501b69ba`.
+- Corrected implementation commit: `5dd751189e21984fb49949f8092d2d3865107b02`.
+  Exact pre-correction runtime rollback: `a24a8c0f045596683070e1237d587af529bde19c`.
+
+## Latest headless correction
+
+The same v2 actor now uses coherent odometry, motion-based prediction of
+steering and the speed-profile query, and a lookahead ceiling that adapts to
+feedback rate. The selected explicit config is
+`fast_corner_18_residual_v2_latency_params.yaml`.
+
+- Original local Linux ten-lap totals: 129.0319 and 133.3047 s.
+- Final local Linux ten-lap totals: 117.3531 and 116.9162 s; mean improves
+  10.70%, with twenty timed laps and zero collisions in each pair.
+- Final Windows cross-check: 10.9938 s best, 110.9386 s total, zero collisions.
+- Bare defaults were tested on Linux, and 73 regression tests passed.
+- Runtime sources match the final bare-default test after LF normalisation;
+  actor bytes match exactly. Protected-environment verification passed.
+- Full metrics, rejected trials, reproduction steps, and clearance limits:
+  `headless-pace-2026-10-16.md`.
+
+These are local simulator results. A new GitHub Judge run is required for the
+correction. The first race completed but its workflow was cancelled during
+cache cleanup; PR #1 was subsequently closed without merging. Do not report
+that run as green. Consult the fork's Actions page for the new validation.
 
 ## Selected model and controls
 
@@ -26,7 +49,7 @@ notification are pending. No merge or organiser notification has been performed.
 - Both bare driver defaults and the default YAML select the same controller.
 - Planning lateral allowance: 18 m/s^2; requested top speed: 7.2 m/s.
 - Guarded exit preview enabled; curvature threshold: 0.30 per m.
-- Explicit equivalent: `fast_corner_18_residual_v2_exit_preview_params.yaml`.
+- Explicit equivalent: `fast_corner_18_residual_v2_latency_params.yaml`.
 - Two earlier full runs: 111.0617 s and 111.2049 s, zero collisions over
   twenty timed laps. Faster single-lap experimental variants were rejected
   because of tracking excursions or incomplete runs.
@@ -47,9 +70,9 @@ it is not a claim of the fastest possible single lap.
   `race_ws/src/team_driver/training/`; the official map reader is unchanged.
 - Protected paths have no diff against the official `origin/track2` revision.
 
-## Clean-clone validation
+## Earlier clean-clone validation, before the headless correction
 
-The frozen implementation commit was exported through a local Git bundle and
+Implementation commit `8ac1d0f3335a6d90aca21679947ded24501b69ba` was exported through a local Git bundle and
 cloned into `/tmp/og7-submission-20261016-v1` inside the existing ROS container.
 No existing race workspace overlay was sourced. The stock ROS and `/sim_ws`
 devkit overlays supplied the base dependencies.
@@ -69,9 +92,9 @@ devkit overlays supplied the base dependencies.
   SHA-256: `ad21db1b4831c76172b60de325b16eae44fab5e568bb25a6b2a79f6f11247206`.
   The submitted copy is byte-identical to the referee output.
 
-The implementation commit above is the one tested. Subsequent local commits
-add documentation and unedited result records; no runtime driver or
-configuration changes follow that test.
+That earlier implementation is the one used in this subsection's test.
+The headless correction above is a later tested runtime, with separate result
+records and source hashes; its timings must not be attributed to this build.
 
 The simulator check uses the native Windows simulator and the existing
 unmodified bridge. It launches the clean clone's official referee and bare

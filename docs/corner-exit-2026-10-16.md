@@ -1,5 +1,9 @@
 # Corner-exit investigation, 16 October 2026
 
+This records the earlier Windows corner-exit work. The later Linux/Windows
+latency correction and current selected defaults are documented in
+`headless-pace-2026-10-16.md`; the same actor and safety limits are retained.
+
 **Current selection:** 18 m/s^2 planning lateral allowance, guarded exit
 preview enabled, original throttle controller, and the existing v2 actor.
 Two full simulator runs completed all 20 timed laps with zero collisions.

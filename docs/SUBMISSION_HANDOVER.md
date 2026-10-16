@@ -7,6 +7,12 @@ GitHub Actions is now enabled on the fork. Organiser notification is still for
 Anderson to send. The publishing commands below remain for reference and any
 later approved updates. Deadline: **18 October 2026, 23:59 SGT**.
 
+The Linux feedback-latency correction and its current validation are documented
+in `headless-pace-2026-10-16.md`. Runtime commit `5dd7511` retains the same actor;
+it reduced mean local Linux ten-lap time from 131.1683 to 117.1347 s while
+preserving Windows pace. PR #1 was closed without merging; use the latest
+correction's Judge run, not the earlier cancelled workflow, for final review.
+
 Official instructions:
 <https://ntudeepspeed.github.io/Recruitment_Hackathon_2627/track2/07-submission.html>
 
@@ -39,7 +45,9 @@ git -c "safe.directory=$submissionRepo" -C $submissionRepo status --short
 The branch must be `submission/og7-track2`. Review root `SUBMISSION.md` and
 `docs/submission-review-2026-10-16.md`. The selected actor is
 `residual_policy_v2_sub12_candidate.npz`; the default controls use the
-18 m/s^2 profile with guarded exit preview. The model and every required
+18 m/s^2 profile with guarded exit preview and adaptive latency controls.
+The explicit selected config is `fast_corner_18_residual_v2_latency_params.yaml`.
+The model and every required
 runtime asset are committed. No manual model upload is needed.
 
 Untracked `maps.zip` and `race_ws/src/team_driver.zip` are excluded on purpose.
