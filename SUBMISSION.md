@@ -97,6 +97,7 @@ and the single warm-up lap. Original referee JSONs are in `results/submitted/`.
 
 | Run | Best lap | 10-lap total | Collisions | Status |
 | --- | ---: | ---: | ---: | --- |
+| `cleanclone_20261016_a` (clean source/build, bare defaults) | **11.0478 s** | **111.0947 s** | 0 | COMPLETE, scored |
 | `cornerexit_preview18_20261016_a` (selected controls, explicit parameters) | **11.0708 s** | **111.0617 s** | 0 | COMPLETE, scored |
 | `cornerexit_default_20261016_b` (selected bare defaults; trace-only override) | **11.0588 s** | **111.2049 s** | 0 | COMPLETE, scored |
 | `cornerexit_baseline_20261016_a` (preview disabled) | 11.0879 s | 112.8843 s | 0 | COMPLETE, scored |
@@ -122,6 +123,7 @@ historical performance evidence. They predate the current driver changes:
 ### The machine that produced the current run
 
 The selected runs recorded real-time factors of 0.666 and 0.670.
+The additional clean-clone run recorded 0.543.
 The October comparison runs ranged from 0.458 to 0.698; the earlier pre-change
 run recorded 0.952. Simulator pacing varied during testing.
 
@@ -171,31 +173,39 @@ prepared to explain its behavior and the model-training process.
 
 ## Known issues
 
-- The selected controls have two complete ten-lap runs on this machine.
+- The selected controls have three complete ten-lap runs on this machine,
+  including a clean-source clone built in the existing container.
   Different simulator pacing or judging hardware may change the results.
 - Throttle switching is reduced in frequency at the exit, but individual
   command jumps remain. Physical jerk has not been measured.
 - The geometric preview is deliberately excluded from tight turns; its model
   does not guarantee grip or yaw stability.
-- A clean-clone build and evaluation are still pending.
+- A newly rebuilt Docker image and headless Linux simulator have not been
+  tested; validation used the existing image and native Windows simulator.
 
 ## Local preparation status
 
 This is a local draft. Nothing has been submitted or published from this
 preparation step. Publication requires the team leader's final approval.
 
-Before requesting that approval:
+Prepared locally:
 
+- All five member names, matric numbers, and email addresses are complete.
 - Destination: `https://github.com/bob-the-doorknob/DeepSpeedRobot` (the
   configured `team` remote). Prepared submission branch: `submission/og7-track2`.
   This branch remains local until the team leader approves publication.
-- Freeze the selected driver and its runtime assets in a local commit,
-  excluding simulator binaries, build/install/log directories, and unrelated
-  ZIP archives.
-- Verify the judging environment and build/evaluate a clean copy of that
-  exact commit. The current worktree results do not replace this check.
-- Review the final commit, result files, and submission record with the team
-  leader.
+- The selected implementation and runtime assets are frozen in local commit
+  `8ac1d0f3335a6d90aca21679947ded24501b69ba`. Simulator binaries,
+  build/install/log directories, and unrelated ZIP archives are excluded.
+- A local Git bundle of that commit was cloned into the container. The
+  official integrity check passed all 64 protected files with no extra files;
+  both ROS packages built, 63 driver tests passed, and all eight installed
+  runtime assets matched source bytes.
+- The clean clone's bare driver completed ten timed laps with no parameter
+  overrides: 11.0478 s best lap, 111.0947 s total, zero collisions. Its original
+  result is `results/submitted/OG7__cleanclone_20261016_a.json`.
+- The final review record is `docs/submission-review-2026-10-16.md`.
+  The team leader's final review and approval are still pending.
 
 After final approval, push the approved branch, check the Judge workflow, and
 provide the organisers with its repository URL and branch before
