@@ -19,7 +19,7 @@ from sensor_msgs.msg import LaserScan
 from std_msgs.msg import Float32
 from visualization_msgs.msg import Marker, MarkerArray
 
-from team_driver.pure_pursuit import PurePursuit
+from team_driver.pure_pursuit import PurePursuit, predict_pose, motion_interval
 from team_driver.exit_preview import ExitPreview
 from team_driver.diagnostics import ControlTrace
 from team_driver.map_guard import MapGuard
@@ -76,6 +76,10 @@ class Driver(Node):
         self.declare_parameter('speed_ki', 0.08)
         self.declare_parameter('speed_approach_band_mps', 0.0)
         self.declare_parameter('control_dt_mode', 'wall')
+        self.declare_parameter('steering_prediction_s', 0.0)
+        self.declare_parameter('steering_prediction_frames', 2.0)
+        self.declare_parameter('speed_prediction_enabled', True)
+        self.declare_parameter('adaptive_lookahead_enabled', True)
         self.declare_parameter('baseline_only', False)
         self.declare_parameter('policy_path', 'packaged:residual_policy_v2_sub12_candidate.npz')
         self.declare_parameter('base_policy_path', '')
@@ -104,6 +108,19 @@ class Driver(Node):
         self.baseline_only = bool(self.get_parameter('baseline_only').value)
         self.safety_enabled = bool(self.get_parameter('safety_enabled').value)
         self.control_dt_mode = str(self.get_parameter('control_dt_mode').value)
+        self.steering_prediction_s = float(self.get_parameter('steering_prediction_s').value)
+        if not math.isfinite(self.steering_prediction_s) or not 0 <= self.steering_prediction_s <= .2:
+            raise ValueError('steering_prediction_s must be in [0, 0.2] seconds')
+        self.steering_prediction_frames = float(self.get_parameter('steering_prediction_frames').value)
+        self.speed_prediction_enabled = bool(self.get_parameter('speed_prediction_enabled').value)
+        self.adaptive_lookahead_enabled = bool(self.get_parameter('adaptive_lookahead_enabled').value)
+        if not math.isfinite(self.steering_prediction_frames) or not 0 <= self.steering_prediction_frames <= 4:
+            raise ValueError('steering_prediction_frames must be in [0, 4]')
+        self.get_logger().info(
+            f'Control prediction: frames={self.steering_prediction_frames:.1f}, '
+            f'fixed={self.steering_prediction_s:.3f}s, '
+            f'speed_profile={self.speed_prediction_enabled}, '
+            f'adaptive_lookahead={self.adaptive_lookahead_enabled}; coherent odometry pose')
         control_dt(self.control_dt_mode, 0.0, None)
         limits_path = str(self.get_parameter('vehicle_limits_path').value).strip()
         if limits_path == 'packaged':
@@ -198,8 +215,10 @@ class Driver(Node):
         self.steering_pub = self.create_publisher(Float32, f'{ns}/steering_command', qos)
         self.marker_pub = self.create_publisher(MarkerArray, '/driver/markers', 1)
 
-        self.create_subscription(LaserScan, f'{ns}/lidar', self.scan_callback, qos)
+        # Prefer updating the complete odometry state before processing a scan
+        # when both callbacks are ready in the single-threaded executor.
         self.create_subscription(Odometry, f'{ns}/odom', self.odom_callback, qos)
+        self.create_subscription(LaserScan, f'{ns}/lidar', self.scan_callback, qos)
         self.create_subscription(Point, f'{ns}/ips', self.ips_callback, qos)
 
         # Latest known pose and speed. Ground truth from the simulator, which
@@ -208,6 +227,8 @@ class Driver(Node):
         self.yaw = 0.0            # [rad]
         self.speed = 0.0          # [m/s]
         self.odom_position = None
+        self.prediction_interval_s = .025
+        self._motion_intervals = []
         self.ips_position = None
         self.last_ips_time = None
         self.pose_source = 'none'
@@ -283,22 +304,29 @@ class Driver(Node):
     # Where the car is. Free, accurate, and worth building on.
     # ------------------------------------------------------------------
     def odom_callback(self, msg):
-        self.position = (msg.pose.pose.position.x, msg.pose.pose.position.y)
+        position = (msg.pose.pose.position.x, msg.pose.pose.position.y)
+        speed = math.hypot(msg.twist.twist.linear.x, msg.twist.twist.linear.y)
+        interval = motion_interval(self.odom_position, position, self.speed, speed)
+        if self.odom_position is not None and math.dist(self.odom_position, position) > .5:
+            self._motion_intervals = []
+            self.prediction_interval_s = .025
+        elif interval is not None:
+            self._motion_intervals = (self._motion_intervals + [interval])[-5:]
+            self.prediction_interval_s = float(np.median(self._motion_intervals))
+        self.position = position
         self.odom_position = self.position
         self.pose_source = 'odom'
         q = msg.pose.pose.orientation
         self.yaw = math.atan2(2.0 * (q.w * q.z + q.x * q.y),
                               1.0 - 2.0 * (q.y * q.y + q.z * q.z))
-        self.speed = math.hypot(msg.twist.twist.linear.x, msg.twist.twist.linear.y)
+        self.speed = speed
         self.yaw_rate = msg.twist.twist.angular.z
         self.last_odom_time = time.monotonic()
 
     def ips_callback(self, msg):
-        """Position alone, at the same rate. /odom carries this plus velocity."""
-        self.position = (msg.x, msg.y)
-        self.ips_position = self.position
+        """Keep IPS for diagnostics; odometry owns the coherent control pose."""
+        self.ips_position = (msg.x, msg.y)
         self.last_ips_time = time.monotonic()
-        self.pose_source = 'ips'
 
     # ------------------------------------------------------------------
     # The control loop, once per LiDAR scan (40 Hz).
@@ -372,19 +400,26 @@ class Driver(Node):
             self.speed_controller.reset()
             return 0.0, 0.0
 
+        prediction_s = (self.steering_prediction_s or
+                        min(.2, self.steering_prediction_frames * self.prediction_interval_s))
+        steering_position, steering_yaw = predict_pose(
+            self.position, self.yaw, self.speed, self.yaw_rate, prediction_s)
+        lookahead_extra = (min(.3, 2*self.speed*max(0., self.prediction_interval_s-.02))
+                           if self.adaptive_lookahead_enabled else 0.)
         steering, lookahead, curvature = self.controller.command(
-            self.position, self.yaw, self.speed
-        )
+            steering_position, steering_yaw, self.speed, lookahead_extra=lookahead_extra)
         curve_speed = math.sqrt(
             self.max_lateral_accel / max(abs(curvature), 1e-4)
         )
-        profile_speed = self.speed_profile.target_speed(self.position)
+        profile_speed = self.speed_profile.target_speed(
+            steering_position if self.speed_prediction_enabled else self.position)
         target_speed = min(profile_speed, curve_speed)
         baseline_steering = steering
         baseline_target_speed = target_speed
         if self.trace is not None:
             segment, _, arc = self.controller._project(self.position)
-            target_arc = (arc + lookahead) % self.controller.total_length
+            _, _, steering_arc = self.controller._project(steering_position)
+            target_arc = (steering_arc + lookahead) % self.controller.total_length
             target = self.controller._point_at(target_arc)
             target_segment = min(int(np.searchsorted(
                 self.controller.cumulative, target_arc, side='right') - 1),
@@ -393,6 +428,7 @@ class Driver(Node):
             state = self.controller.path_state(self.position, self.yaw)
             self.trace_sample.update(baseline_target_mps=target_speed,
                 baseline_steering=steering, yaw_rad=self.yaw,
+                prediction_horizon_s=prediction_s, motion_interval_s=self.prediction_interval_s,
                 path_arc_m=arc, path_segment_index=segment,
                 target_segment_index=target_segment,
                 target_x_m=float(target[0]), target_y_m=float(target[1]),

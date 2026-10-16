@@ -26,6 +26,7 @@ PLANNING_FIELDS = (
     "profile_target_mps", "steering_curve_target_mps", "steering_rad",
     "limiting_stage", "braking_reason",
     "pose_source", "ips_odom_delta_m", "yaw_rate_radps",
+    "prediction_horizon_s", "motion_interval_s",
 )
 
 

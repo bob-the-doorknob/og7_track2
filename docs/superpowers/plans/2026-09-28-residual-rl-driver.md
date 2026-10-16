@@ -105,7 +105,7 @@ The current local Git branch is `track2`, and its `origin` remote points to the 
 
 Evaluation attempt on 2026-09-29: the package built, but the referee aborted before scoring because the AutoDRIVE bridge published no telemetry for 120 seconds. The unscored diagnostic is in `results/task1_baseline__task1_baseline_20260929.json`; it is not a baseline comparison run.
 
-Completed baseline on 2026-09-29: `results/task1_baseline__task1_baseline_connected_20260929.json` is `COMPLETE`, `scored: true`, with 10/10 timed laps, zero collisions, a 29.3355 s best lap, and a 295.6529 s penalized 10-lap total (real-time factor 0.811). This run used the compete build in the Windows simulator connected to the container bridge.
+Completed baseline on 2026-09-29: `results/submitted/task1_baseline__task1_baseline_connected_20260929.json` is `COMPLETE`, `scored: true`, with 10/10 timed laps, zero collisions, a 29.3355 s best lap, and a 295.6529 s penalized 10-lap total (real-time factor 0.811). This run used the compete build in the Windows simulator connected to the container bridge.
 
 ### Task 2: Add a bounded safety layer
 
@@ -118,7 +118,7 @@ Completed baseline on 2026-09-29: `results/task1_baseline__task1_baseline_connec
 - [x] Allow the safety layer to reduce target speed or reject a residual action; never let it increase the baseline command beyond the configured limit.
 - [x] Preserve a baseline-only mode so every later training or runtime failure has a usable fallback.
 
-Completed safety comparison on 2026-09-29: `results/task2_safety__task2_safety_20260929.json` is `COMPLETE`, `scored: true`, with 10/10 timed laps, zero collisions, a 29.4345 s best lap, and a 294.7702 s penalized 10-lap total (real-time factor 0.754, callback errors 0). This single run checks completion and safety behavior; the 0.8827 s total-time difference from Task 1 is too small to treat as an established speed gain.
+Completed safety comparison on 2026-09-29: `results/submitted/task2_safety__task2_safety_20260929.json` is `COMPLETE`, `scored: true`, with 10/10 timed laps, zero collisions, a 29.4345 s best lap, and a 294.7702 s penalized 10-lap total (real-time factor 0.754, callback errors 0). This single run checks completion and safety behavior; the 0.8827 s total-time difference from Task 1 is too small to treat as an established speed gain.
 
 ### Task 3: Define the residual policy interface
 

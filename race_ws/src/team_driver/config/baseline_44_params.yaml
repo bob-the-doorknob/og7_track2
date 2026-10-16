@@ -15,6 +15,10 @@ driver:
     speed_ff_gain: 0.16
     speed_kp: 0.24
     speed_ki: 0.08
+    steering_prediction_s: 0.0
+    steering_prediction_frames: 0.0
+    speed_prediction_enabled: false
+    adaptive_lookahead_enabled: false
     baseline_only: true           # baseline comparison; same 4.4 m/s settings
     policy_path: ""               # ignored while baseline_only is true
     safety_enabled: true

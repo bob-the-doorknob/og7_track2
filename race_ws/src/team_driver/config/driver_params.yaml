@@ -18,6 +18,10 @@ driver:
     speed_kp: 0.24
     speed_ki: 0.08
     speed_approach_band_mps: 0.0
+    steering_prediction_s: 0.0
+    steering_prediction_frames: 2.0
+    speed_prediction_enabled: true
+    adaptive_lookahead_enabled: true
     baseline_only: false
     policy_path: "packaged:residual_policy_v2_sub12_candidate.npz"
     safety_enabled: true

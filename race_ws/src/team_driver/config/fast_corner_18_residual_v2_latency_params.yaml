@@ -1,0 +1,33 @@
+# Selected judged configuration. Keep in sync with the defaults in driver.py
+# so both `ros2 run team_driver driver` and driver.launch.py use the same actor.
+# Earlier configurations remain available in their named YAML files.
+driver:
+  ros__parameters:
+    vehicle_ns: /autodrive/roboracer_1
+    max_range: 10.0
+    centerline_path: ""
+    vehicle_limits_path: packaged
+    planning_lateral_mps2: 18.0
+    planning_top_speed_mps: 7.2
+    map_guard_path: packaged
+    wheelbase: 0.324
+    lookahead_min: 0.55
+    lookahead_max: 1.5
+    lookahead_speed_gain: 0.25
+    speed_ff_gain: 0.16
+    speed_kp: 0.24
+    speed_ki: 0.08
+    speed_approach_band_mps: 0.0
+    steering_prediction_s: 0.0
+    steering_prediction_frames: 2.0
+    speed_prediction_enabled: true
+    adaptive_lookahead_enabled: true
+    baseline_only: false
+    policy_path: "packaged:residual_policy_v2_sub12_candidate.npz"
+    safety_enabled: true
+    safety_exit_preview_enabled: true
+    safety_exit_preview_max_curvature_inv_m: 0.30
+    safety_side_margin: 0.08
+    safety_stop_margin: 0.25
+    safety_max_deceleration: 2.8
+    safety_horizon: 10.0

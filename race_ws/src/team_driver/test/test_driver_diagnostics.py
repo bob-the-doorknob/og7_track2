@@ -11,6 +11,7 @@ def test_trace_preserves_controls_and_records_safety_and_stale_pose(tmp_path):
     rclpy = pytest.importorskip("rclpy")
     from team_driver.diagnostics import ControlTrace
     from team_driver.driver import Driver
+    from team_driver.pure_pursuit import predict_pose
 
     rclpy.init(args=[])
     node = None
@@ -40,18 +41,22 @@ def test_trace_preserves_controls_and_records_safety_and_stale_pose(tmp_path):
             assert node.trace_sample["final_target_mps"] >= 0
             assert "path_clearance_m" in node.trace_sample
             assert "policy_target_mps" in node.trace_sample
+            predicted_position, predicted_yaw = predict_pose(node.position,
+                node.yaw, node.speed, node.yaw_rate,
+                node.trace_sample['prediction_horizon_s'])
+            extra = min(.3, 2*speed*max(0.,node.prediction_interval_s-.02))
             expected_steering, lookahead, curvature = node.controller.command(
-                node.position, node.yaw, node.speed)
-            _, _, arc = node.controller._project(node.position)
+                predicted_position, predicted_yaw, node.speed, lookahead_extra=extra)
+            _, _, arc = node.controller._project(predicted_position)
             target = node.controller._point_at(arc + lookahead)
             future_curves, _ = node.speed_profile.future_features(node.position)
             assert node.trace_sample['lookahead_m'] == lookahead
             assert node.trace_sample['command_curvature_inv_m'] == curvature
-            assert node.trace_sample['path_arc_m'] == arc
+            assert node.trace_sample['path_arc_m'] == node.controller._project(node.position)[2]
             assert node.trace_sample['target_x_m'] == target[0]
             assert node.trace_sample['target_y_m'] == target[1]
             assert node.trace_sample['route_curvature_1m_inv_m'] == future_curves[1]
-            assert node.trace_sample['profile_target_mps'] == node.speed_profile.target_speed(node.position)
+            assert node.trace_sample['profile_target_mps'] == node.speed_profile.target_speed(predicted_position)
             assert node.trace_sample['limiting_stage'] in (
                 'profile', 'steering_curvature', 'policy', 'safety')
             assert node.trace_sample['braking_reason'] == (
@@ -220,7 +225,7 @@ def test_pose_trace_exposes_independent_ips_updates(tmp_path):
         node.plan(np.full(1080, 10.), np.linspace(-3*math.pi/4, 3*math.pi/4, 1080))
         assert abs(node.trace_sample['ips_odom_delta_m'] - .1) < 1e-12
         assert node.trace_sample['yaw_rate_radps'] == .5
-        assert node.trace_sample['pose_source'] in ('ips', 'odom')
+        assert node.trace_sample['pose_source'] == 'odom'
     finally:
         trace.close()
         if node is not None:
