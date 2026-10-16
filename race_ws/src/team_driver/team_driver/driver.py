@@ -20,6 +20,8 @@ from std_msgs.msg import Float32
 from visualization_msgs.msg import Marker, MarkerArray
 
 from team_driver.pure_pursuit import PurePursuit
+from team_driver.exit_preview import ExitPreview
+from team_driver.diagnostics import ControlTrace
 from team_driver.map_guard import MapGuard
 from team_driver.residual_policy import (ResidualPolicy, pack_observation,
                                          pack_observation_v2, scale_stacked_adjustment)
@@ -52,7 +54,8 @@ class Driver(Node):
     def __init__(self):
         super().__init__('driver')
 
-        # config/driver_params.yaml supplies values during evaluation.
+        # Defaults match config/driver_params.yaml so the judge's bare
+        # `ros2 run team_driver driver` entry point uses the selected actor.
         self.declare_parameter('vehicle_ns', '/autodrive/roboracer_1')
         self.declare_parameter('max_range', 10.0)         # [m] clip the scan here
 
@@ -60,28 +63,38 @@ class Driver(Node):
         self.declare_parameter('target_speed', 4.4)
         self.declare_parameter('max_lateral_accel', 1.5)
         self.declare_parameter('max_braking_decel', 2.0)
-        self.declare_parameter('vehicle_limits_path', '')
-        self.declare_parameter('planning_lateral_mps2', 0.0)
-        self.declare_parameter('planning_top_speed_mps', 0.0)
-        self.declare_parameter('map_guard_path', '')
+        self.declare_parameter('vehicle_limits_path', 'packaged')
+        self.declare_parameter('planning_lateral_mps2', 18.0)
+        self.declare_parameter('planning_top_speed_mps', 7.2)
+        self.declare_parameter('map_guard_path', 'packaged')
         self.declare_parameter('wheelbase', 0.324)
         self.declare_parameter('lookahead_min', 0.55)
-        self.declare_parameter('lookahead_max', 1.8)
-        self.declare_parameter('lookahead_speed_gain', 0.35)
+        self.declare_parameter('lookahead_max', 1.5)
+        self.declare_parameter('lookahead_speed_gain', 0.25)
         self.declare_parameter('speed_ff_gain', 0.16)
         self.declare_parameter('speed_kp', 0.24)
         self.declare_parameter('speed_ki', 0.08)
+        self.declare_parameter('speed_approach_band_mps', 0.0)
         self.declare_parameter('control_dt_mode', 'wall')
-        self.declare_parameter('baseline_only', True)
-        self.declare_parameter('policy_path', '')
+        self.declare_parameter('baseline_only', False)
+        self.declare_parameter('policy_path', 'packaged:residual_policy_v2_sub12_candidate.npz')
         self.declare_parameter('base_policy_path', '')
         self.declare_parameter('stacked_steering_scale', 1.0 / 3.0)
         self.declare_parameter('stacked_speed_scale', 0.5)
         self.declare_parameter('safety_enabled', True)
         self.declare_parameter('safety_side_margin', 0.08)
         self.declare_parameter('safety_stop_margin', 0.25)
-        self.declare_parameter('safety_max_deceleration', 2.0)
-        self.declare_parameter('safety_horizon', 5.5)
+        self.declare_parameter('safety_max_deceleration', 2.8)
+        self.declare_parameter('safety_horizon', 10.0)
+        self.declare_parameter('safety_exit_preview_enabled', True)
+        self.declare_parameter('safety_exit_preview_hold_s', 0.15)
+        self.declare_parameter('safety_exit_preview_max_cross_track_m', 0.20)
+        self.declare_parameter('safety_exit_preview_max_heading_rad', 0.20)
+        self.declare_parameter('safety_exit_preview_curvature_ratio', 0.60)
+        self.declare_parameter('safety_exit_preview_max_speed_gain_mps', 1.0)
+        self.declare_parameter('safety_exit_preview_horizon_m', 6.0)
+        self.declare_parameter('safety_exit_preview_max_curvature_inv_m', 0.30)
+        self.declare_parameter('trace_path', '')
 
         self.max_range = float(self.get_parameter('max_range').value)
         self.target_speed = max(float(self.get_parameter('target_speed').value), 0.0)
@@ -150,6 +163,7 @@ class Driver(Node):
             throttle_min=-1.0 if self.vehicle_limits is not None else -0.12,
             throttle_max=1.0 if self.vehicle_limits is not None else 0.65,
             active_braking=self.vehicle_limits is not None,
+            approach_band_mps=float(self.get_parameter('speed_approach_band_mps').value),
         )
         self.safety = LidarSafety(
             wheelbase=float(self.get_parameter('wheelbase').value),
@@ -162,6 +176,16 @@ class Driver(Node):
             horizon=float(self.get_parameter('safety_horizon').value),
             max_range=self.max_range,
         )
+        self.exit_preview = ExitPreview(**{
+            key: self.get_parameter('safety_exit_preview_' + key).value
+            for key in ('enabled', 'hold_s', 'max_cross_track_m', 'max_heading_rad',
+                        'curvature_ratio', 'max_speed_gain_mps', 'horizon_m',
+                        'max_curvature_inv_m')})
+        if self.exit_preview.enabled:
+            self.get_logger().info(
+                f'Guarded exit preview enabled: curvature <= '
+                f'{self.exit_preview.max_curvature_inv_m:.2f}/m, '
+                f'max speed lift {self.exit_preview.max_speed_gain_mps:.2f} m/s')
         self.get_logger().info(
             f'Loaded {len(self.controller.points)} centreline points from '
             f'{centerline_path}; target speed {self.target_speed:.2f} m/s'
@@ -183,6 +207,11 @@ class Driver(Node):
         self.position = None      # (x, y) in the `world` frame
         self.yaw = 0.0            # [rad]
         self.speed = 0.0          # [m/s]
+        self.odom_position = None
+        self.ips_position = None
+        self.last_ips_time = None
+        self.pose_source = 'none'
+        self.yaw_rate = 0.0
         self.last_odom_time = None
         self.last_control_time = None
         self.last_safety_warning = 0.0
@@ -241,31 +270,54 @@ class Driver(Node):
                     'running the classical baseline.'
                 )
 
+        trace_path = str(self.get_parameter('trace_path').value).strip()
+        self.trace = ControlTrace(trace_path) if trace_path else None
+        self.trace_started = time.monotonic()
+        self.trace_sample = None
+        if self.trace is not None:
+            self.get_logger().info(
+                f'Diagnostic trace enabled: {self.trace.path}; retains the last '
+                '24000 scans in memory and writes on Ctrl+C / clean shutdown.')
+
     # ------------------------------------------------------------------
     # Where the car is. Free, accurate, and worth building on.
     # ------------------------------------------------------------------
     def odom_callback(self, msg):
         self.position = (msg.pose.pose.position.x, msg.pose.pose.position.y)
+        self.odom_position = self.position
+        self.pose_source = 'odom'
         q = msg.pose.pose.orientation
         self.yaw = math.atan2(2.0 * (q.w * q.z + q.x * q.y),
                               1.0 - 2.0 * (q.y * q.y + q.z * q.z))
         self.speed = math.hypot(msg.twist.twist.linear.x, msg.twist.twist.linear.y)
+        self.yaw_rate = msg.twist.twist.angular.z
         self.last_odom_time = time.monotonic()
 
     def ips_callback(self, msg):
         """Position alone, at the same rate. /odom carries this plus velocity."""
         self.position = (msg.x, msg.y)
+        self.ips_position = self.position
+        self.last_ips_time = time.monotonic()
+        self.pose_source = 'ips'
 
     # ------------------------------------------------------------------
     # The control loop, once per LiDAR scan (40 Hz).
     # ------------------------------------------------------------------
     def scan_callback(self, scan):
         now = time.monotonic()
+        wall_dt = 0.0 if self.last_control_time is None else now - self.last_control_time
         dt = control_dt(self.control_dt_mode, now, self.last_control_time)
         self.last_control_time = now
         ranges, angles = self.preprocess(scan)
         steering, throttle = self.plan(ranges, angles, dt, scan.ranges)
         self.publish(steering, throttle)
+
+        if self.trace is not None:
+            self.trace.record(dict(
+                self.trace_sample, elapsed_s=now - self.trace_started,
+                wall_dt_s=wall_dt, control_dt_s=dt,
+                compute_ms=(time.monotonic() - now) * 1000.0,
+                steering=steering, throttle=throttle))
 
         self._marker_divisor = (self._marker_divisor + 1) % 10
         if self._marker_divisor == 0:
@@ -290,9 +342,21 @@ class Driver(Node):
     # ==================================================================
     def plan(self, ranges, angles, dt=0.025, raw_ranges=None):
         """Follow the centreline and lower the target speed when LiDAR requires."""
+        odom_age = (float('inf') if self.last_odom_time is None else
+                    time.monotonic() - self.last_odom_time)
+        if self.trace is not None:
+            self.trace_sample = dict(
+                odom_age_s=odom_age, speed_mps=self.speed,
+                x_m=self.position[0] if self.position is not None else float('nan'),
+                y_m=self.position[1] if self.position is not None else float('nan'),
+                pose_source=self.pose_source, yaw_rate_radps=self.yaw_rate,
+                ips_odom_delta_m=(math.dist(self.ips_position, self.odom_position)
+                    if self.ips_position is not None and self.odom_position is not None
+                    else float('nan')),
+                status='ok')
         odom_fresh = (
             self.last_odom_time is not None
-            and time.monotonic() - self.last_odom_time <= 0.5
+            and odom_age <= 0.5
         )
         pose_valid = (
             self.position is not None
@@ -301,21 +365,49 @@ class Driver(Node):
             and math.isfinite(self.speed)
         )
         if not odom_fresh or not pose_valid:
+            if self.trace is not None:
+                self.trace_sample.update(
+                    status='stale_odom' if not odom_fresh else 'invalid_pose',
+                    final_target_mps=0.0)
             self.speed_controller.reset()
             return 0.0, 0.0
 
-        steering, _, curvature = self.controller.command(
+        steering, lookahead, curvature = self.controller.command(
             self.position, self.yaw, self.speed
         )
         curve_speed = math.sqrt(
             self.max_lateral_accel / max(abs(curvature), 1e-4)
         )
-        target_speed = min(self.speed_profile.target_speed(self.position), curve_speed)
+        profile_speed = self.speed_profile.target_speed(self.position)
+        target_speed = min(profile_speed, curve_speed)
         baseline_steering = steering
         baseline_target_speed = target_speed
+        if self.trace is not None:
+            segment, _, arc = self.controller._project(self.position)
+            target_arc = (arc + lookahead) % self.controller.total_length
+            target = self.controller._point_at(target_arc)
+            target_segment = min(int(np.searchsorted(
+                self.controller.cumulative, target_arc, side='right') - 1),
+                len(self.controller.segment_lengths) - 1)
+            route_curves, _ = self.speed_profile.future_features(self.position)
+            state = self.controller.path_state(self.position, self.yaw)
+            self.trace_sample.update(baseline_target_mps=target_speed,
+                baseline_steering=steering, yaw_rad=self.yaw,
+                path_arc_m=arc, path_segment_index=segment,
+                target_segment_index=target_segment,
+                target_x_m=float(target[0]), target_y_m=float(target[1]),
+                lookahead_m=lookahead, command_curvature_inv_m=curvature,
+                route_curvature_inv_m=route_curves[0],
+                route_curvature_1m_inv_m=route_curves[1],
+                route_curvature_3m_inv_m=route_curves[2],
+                profile_target_mps=profile_speed, steering_curve_target_mps=curve_speed,
+                cross_track_m=state.cross_track_error, heading_error_rad=state.heading_error)
         if self.policy is not None:
             try:
                 path_state = self.controller.path_state(self.position, self.yaw)
+                if self.trace is not None:
+                    self.trace_sample.update(cross_track_m=path_state.cross_track_error,
+                                             heading_error_rad=path_state.heading_error)
                 lidar_ranges = ranges if raw_ranges is None else raw_ranges
                 if self.policy.observation_version == 2:
                     future_curvature, future_targets = self.speed_profile.future_features(
@@ -347,11 +439,18 @@ class Driver(Node):
                         self.stacked_steering_scale, self.stacked_speed_scale)
                 steering = float(np.clip(base_steering + steering_delta, -1.0, 1.0))
                 target_speed = min(base_speed * speed_multiplier, self.target_speed)
+                if self.trace is not None:
+                    self.trace_sample['speed_multiplier'] = speed_multiplier
             except ValueError as exc:
+                if self.trace is not None:
+                    self.trace_sample['status'] = 'policy_fallback'
                 steering, target_speed = baseline_steering, baseline_target_speed
                 if time.monotonic() - self.last_policy_warning > 5.0:
                     self.get_logger().warn(f'Residual observation/action invalid: {exc}; using baseline')
                     self.last_policy_warning = time.monotonic()
+        policy_target_speed = target_speed
+        if self.trace is not None:
+            self.trace_sample['policy_target_mps'] = target_speed
         if self.safety_enabled:
             map_certified = (
                 self.map_guard is not None
@@ -367,12 +466,35 @@ class Driver(Node):
                 proposed_target_speed=target_speed,
                 speed_ceiling=self.target_speed if self.policy is not None else None,
                 clear_horizon_certified=map_certified,
+                trajectory=self.exit_preview.trajectory(
+                    self.controller, self.speed_profile, self.map_guard, self.safety,
+                    self.position, self.yaw, self.speed, steering, target_speed),
             )
-            steering, target_speed = decision.steering, decision.target_speed
+            steering = decision.steering
+            target_speed = self.exit_preview.target_speed(decision, self.safety)
+            if self.trace is not None:
+                self.trace_sample.update(
+                    map_certified=map_certified, path_clearance_m=decision.path_clearance,
+                    arc_clearance_m=decision.arc_clearance,
+                    exit_preview_used=decision.preview_used,
+                    residual_rejected=decision.residual_rejected,
+                    sensor_valid=decision.sensor_valid)
             if not decision.sensor_valid and time.monotonic() - self.last_safety_warning > 5.0:
                 self.get_logger().warn('LiDAR forward sector is invalid; holding zero target speed')
                 self.last_safety_warning = time.monotonic()
+        if self.trace is not None:
+            self.trace_sample['final_target_mps'] = target_speed
         throttle = self.speed_controller.command(target_speed, self.speed, dt)
+        if self.trace is not None:
+            limiting_stage = 'profile' if profile_speed <= curve_speed else 'steering_curvature'
+            if policy_target_speed < baseline_target_speed - 1e-6:
+                limiting_stage = 'policy'
+            if target_speed < policy_target_speed - 1e-6:
+                limiting_stage = 'safety'
+            self.trace_sample.update(
+                steering_rad=steering * MAX_STEERING_RAD,
+                limiting_stage=limiting_stage,
+                braking_reason=('overspeed_' + limiting_stage if throttle < -.01 else 'none'))
         return steering, throttle
 
     # ------------------------------------------------------------------
@@ -416,6 +538,14 @@ def main(args=None):
         if rclpy.ok():
             node.publish(0.0, 0.0)
             time.sleep(0.10)
+        if node.trace is not None:
+            try:
+                node.trace.close()
+                node.get_logger().info(
+                    f'Saved diagnostic trace to {node.trace.path}; '
+                    f'{node.trace.dropped_samples} older samples dropped.')
+            except OSError as exc:
+                node.get_logger().error(f'Could not save diagnostic trace: {exc}')
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()

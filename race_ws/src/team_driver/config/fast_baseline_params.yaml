@@ -1,8 +1,9 @@
 # Candidate only: measured 6.30 m/s peak, classical controller, active braking.
-# Keep driver_params.yaml as the current scored 4.4 m/s RL champion.
+# The selected judged default is in driver_params.yaml; this is a separate classical candidate.
 driver:
   ros__parameters:
     vehicle_ns: /autodrive/roboracer_1
+    planning_lateral_mps2: 24.0
     max_range: 10.0
     centerline_path: ""
     vehicle_limits_path: packaged
@@ -19,6 +20,7 @@ driver:
     baseline_only: true
     policy_path: ""
     safety_enabled: true
+    safety_exit_preview_enabled: false
     safety_side_margin: 0.08
     safety_stop_margin: 0.25
     safety_max_deceleration: 2.0

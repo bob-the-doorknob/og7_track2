@@ -24,6 +24,7 @@ class SpeedController:
         throttle_min: float = -0.12,
         throttle_max: float = 0.65,
         active_braking: bool = False,
+        approach_band_mps: float = 0.0,
     ) -> None:
         self.feedforward_gain = max(float(feedforward_gain), 0.0)
         self.kp = max(float(kp), 0.0)
@@ -32,6 +33,9 @@ class SpeedController:
         self.throttle_min = min(float(throttle_min), 0.0)
         self.throttle_max = max(float(throttle_max), 0.0)
         self.active_braking = bool(active_braking)
+        self.approach_band_mps = float(approach_band_mps)
+        if not math.isfinite(self.approach_band_mps) or self.approach_band_mps < 0.0:
+            raise ValueError("approach_band_mps must be finite and nonnegative")
         self.integral = 0.0
 
     def reset(self) -> None:
@@ -78,4 +82,9 @@ class SpeedController:
             output = max(output, 0.0)
         else:
             output = min(max(output, self.throttle_min), 0.0)
+        if self.active_braking and self.approach_band_mps > 0.0 and output > 0.0:
+            # Taper positive torque before reaching the target. Active braking
+            # above the existing 0.05 m/s threshold returns earlier unchanged.
+            # This avoids jumping from full feed-forward torque to light braking.
+            output *= min(max(error / self.approach_band_mps, 0.0), 1.0)
         return min(max(float(output), self.throttle_min), self.throttle_max)

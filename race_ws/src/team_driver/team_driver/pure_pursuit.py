@@ -114,6 +114,41 @@ class PurePursuit:
         ))
         return steering, lookahead, curvature
 
+    def preview_trajectory(self, position, yaw, speed, steering, horizon=10.0,
+                           hold_s=.15, step=.1):
+        """Predict the follower after briefly holding the actual steering.
+
+        Return dense points in the current car frame, stopping before the
+        predicted heading turns outside the forward LiDAR hemisphere.
+        """
+        if (not all(math.isfinite(value) for value in
+                    (*position, yaw, speed, steering, horizon, hold_s, step))
+                or speed < 0 or horizon <= 0 or hold_s < 0 or step <= 0):
+            return None
+        origin = np.asarray(position, dtype=float)
+        predicted = origin.copy()
+        predicted_yaw = yaw
+        points = [predicted.copy()]
+        hold_distance = max(.25, speed * hold_s)
+        for distance in np.arange(0.0, horizon, step):
+            command = (steering if distance < hold_distance else
+                       self.command(tuple(predicted), predicted_yaw, speed)[0])
+            curvature = math.tan(float(np.clip(command, -1, 1)) * self.max_steering_rad) / self.wheelbase
+            ds = min(step, horizon-distance)
+            next_yaw = predicted_yaw + curvature*ds
+            if math.cos(next_yaw-yaw) <= 0:
+                break
+            if abs(curvature) < 1e-6:
+                predicted += ds*np.asarray((math.cos(predicted_yaw), math.sin(predicted_yaw)))
+            else:
+                predicted += np.asarray((math.sin(next_yaw)-math.sin(predicted_yaw),
+                                          math.cos(predicted_yaw)-math.cos(next_yaw))) / curvature
+            predicted_yaw = next_yaw
+            points.append(predicted.copy())
+        rotation = np.asarray(((math.cos(yaw), -math.sin(yaw)),
+                               (math.sin(yaw), math.cos(yaw))))
+        return (np.asarray(points)-origin) @ rotation
+
     def path_state(self, position: tuple[float, float], yaw: float) -> PathState:
         """Describe pose error and the next 1.5 m of path for the policy."""
         if not all(math.isfinite(value) for value in (*position, yaw)):

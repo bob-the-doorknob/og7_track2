@@ -72,3 +72,28 @@ class MapGuard:
         state = self.path.path_state(position, yaw)
         return (abs(state.cross_track_error) <= 0.35
                 and abs(state.heading_error) <= 0.25)
+
+    def certifies_trajectory(self, position, yaw, trajectory, footprint_m=None):
+        """Check every preview footprint; unknown/out-of-map cells fail closed."""
+        try:
+            points = np.asarray(trajectory, dtype=float)
+        except (TypeError, ValueError):
+            return False
+        radius = self.footprint_m if footprint_m is None else float(footprint_m)
+        if (points.ndim != 2 or points.shape[1] != 2 or len(points) < 2
+                or not np.all(np.isfinite(points)) or not math.isfinite(radius)
+                or radius <= 0 or not all(math.isfinite(v) for v in (*position, yaw))):
+            return False
+        rotation = np.asarray(((math.cos(yaw), math.sin(yaw)),
+                               (-math.sin(yaw), math.cos(yaw))))
+        world = np.asarray(position) + points @ rotation
+        # Cover between samples and include the map-cell half-diagonal.
+        spacing = float(np.max(np.linalg.norm(np.diff(points, axis=0), axis=1)))
+        padded_radius = radius + spacing / 2 + math.sqrt(2) * self.resolution
+        # A filled disk also detects small occupied cells inside the footprint.
+        offsets = np.arange(-padded_radius, padded_radius + self.resolution,
+                            self.resolution)
+        xx, yy = np.meshgrid(offsets, offsets)
+        disks = np.column_stack((xx.ravel(), yy.ravel()))
+        disks = disks[np.linalg.norm(disks, axis=1) <= padded_radius]
+        return self._free_points((world[:, None, :] + disks[None, :, :]).reshape(-1, 2))

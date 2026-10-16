@@ -1,0 +1,27 @@
+# Experimental candidate: selected actor with positive-torque taper near target.
+# No new scored results yet. Keep the original sub-12 configuration as reference.
+driver:
+  ros__parameters:
+    vehicle_ns: /autodrive/roboracer_1
+    max_range: 10.0
+    centerline_path: ""
+    vehicle_limits_path: packaged
+    planning_lateral_mps2: 24.0
+    planning_top_speed_mps: 7.2
+    map_guard_path: packaged
+    wheelbase: 0.324
+    lookahead_min: 0.55
+    lookahead_max: 1.5
+    lookahead_speed_gain: 0.25
+    speed_ff_gain: 0.16
+    speed_kp: 0.24
+    speed_ki: 0.08
+    speed_approach_band_mps: 0.3
+    baseline_only: false
+    policy_path: "packaged:residual_policy_v2_sub12_candidate.npz"
+    safety_enabled: true
+    safety_exit_preview_enabled: false
+    safety_side_margin: 0.08
+    safety_stop_margin: 0.25
+    safety_max_deceleration: 2.8
+    safety_horizon: 10.0

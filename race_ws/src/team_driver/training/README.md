@@ -205,7 +205,8 @@ ros2 run team_driver driver --ros-args \
 
 This uses the original racing line and a candidate-only 15.0 m/s² lateral
 planning allowance. The measured `config/vehicle_limits.yaml` remains
-unchanged. The old `driver_params.yaml` still loads the 4.4 m/s RL actor.
+unchanged. The 4.4 m/s RL actor was the default at the time of this experiment;
+the current `driver_params.yaml` selects the later sub-12 residual actor.
 Only run one driver at a time, and stop the referee before manual driving.
 
 ## Offline racing-line search

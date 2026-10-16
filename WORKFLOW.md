@@ -5,9 +5,9 @@ the **native Windows AutoDRIVE Simulator**. The simulator connects to the ROS
 bridge on `127.0.0.1:4567`. The source code and result files live in this Git
 repository, not inside the container image.
 
-The current driver defaults to the measured classical controller
-(`baseline_only: true`). The residual policy interface is wired in, but a
-learned model has not been trained or selected yet.
+The current driver uses the packaged v2 residual actor. Current corner-exit
+settings and simulator evidence are in
+[the controller investigation](docs/corner-exit-2026-10-16.md).
 
 ## One-time setup on a new Windows checkout
 

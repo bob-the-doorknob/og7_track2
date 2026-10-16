@@ -15,6 +15,8 @@ class SafetyDecision(NamedTuple):
     path_clearance: float
     residual_rejected: bool
     sensor_valid: bool
+    arc_clearance: float = 0.0
+    preview_used: bool = False
 
 
 class LidarSafety:
@@ -134,6 +136,33 @@ class LidarSafety:
         first = np.flatnonzero(occupied)
         return float(arc[first[0]]) if first.size else visible_horizon
 
+    def _trajectory_clearance(self, points, trajectory):
+        """Return (clearance, obstacle hit) for a dense forward swept path."""
+        try:
+            path = np.asarray(trajectory, dtype=np.float64)
+        except (TypeError, ValueError):
+            return None
+        if (path.ndim != 2 or path.shape[1] != 2 or len(path) < 2
+                or not np.all(np.isfinite(path)) or np.linalg.norm(path[0]) > 1e-6
+                or np.any(path[1:,0] <= 0)
+                or np.any(np.linalg.norm(path, axis=1) > self.max_range)):
+            return None
+        steps = np.linalg.norm(np.diff(path, axis=0), axis=1)
+        if np.any(steps <= 0) or np.any(steps > self.path_step * 1.01):
+            return None
+        arc = np.concatenate(([0.0], np.cumsum(steps)))
+        selected = arc <= self.horizon + 1e-6
+        arc, path = arc[selected], path[selected]
+        if len(path) < 2:
+            return None
+        if points.size:
+            distance_squared = np.sum((points[:,None,:]-path[None,:,:])**2, axis=2)
+            occupied = np.any(distance_squared <= self.footprint_radius**2, axis=0)
+            first = np.flatnonzero(occupied)
+            if first.size:
+                return float(arc[first[0]]), True
+        return float(arc[-1]), False
+
     def apply(
         self,
         ranges: np.ndarray,
@@ -144,6 +173,7 @@ class LidarSafety:
         proposed_target_speed: float | None = None,
         speed_ceiling: float | None = None,
         clear_horizon_certified: bool = False,
+        trajectory: np.ndarray | None = None,
     ) -> SafetyDecision:
         """Clamp a proposed action to a speed ceiling and LiDAR limit.
 
@@ -189,6 +219,15 @@ class LidarSafety:
             baseline_clearance if proposed_steering == baseline_steering
             else self._path_clearance(points, proposed_steering)
         )
+        arc_clearance = proposed_clearance
+        preview_result = (None if trajectory is None else
+                          self._trajectory_clearance(points, trajectory))
+        # A shorter clear preview must not slow an already-clear original arc.
+        # An actual obstacle on the preview still imposes its stopping cap.
+        preview_used = preview_result is not None and (
+            preview_result[1] or preview_result[0] > proposed_clearance)
+        if preview_used:
+            proposed_clearance = preview_result[0]
         rejected = not proposal_valid or (
             proposed_steering != baseline_steering
             and proposed_clearance < self.reject_clearance
@@ -198,16 +237,18 @@ class LidarSafety:
         clearance = baseline_clearance if rejected else proposed_clearance
         if rejected:
             proposed_target_speed = baseline_target_speed
+            preview_used = False
         speed_limit = math.sqrt(
             2.0 * self.max_deceleration
             * max(0.0, clearance - self.stop_margin)
         )
-        if clear_horizon_certified and clearance >= self.horizon - self.path_step:
+        if (not preview_used and clear_horizon_certified
+                and clearance >= self.horizon - self.path_step):
             speed_limit = float("inf")
         target_speed = min(
             speed_ceiling, proposed_target_speed, speed_limit
         )
         return SafetyDecision(
             steering, float(target_speed), float(front), float(clearance),
-            bool(rejected), True
+            bool(rejected), True, float(arc_clearance), bool(preview_used)
         )

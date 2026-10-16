@@ -11,9 +11,12 @@ import argparse
 import csv
 import math
 from pathlib import Path
+import sys
 
 import numpy as np
 
+# Reuse the unmodified official map reader from this repository.
+sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "scripts"))
 from track_tool import OccupancyMap
 
 

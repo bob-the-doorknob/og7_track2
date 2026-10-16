@@ -20,6 +20,7 @@ driver:
     baseline_only: true
     policy_path: ""
     safety_enabled: true
+    safety_exit_preview_enabled: false
     safety_side_margin: 0.08
     safety_stop_margin: 0.25
     safety_max_deceleration: 2.0
