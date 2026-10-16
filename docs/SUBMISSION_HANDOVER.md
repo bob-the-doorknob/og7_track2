@@ -1,8 +1,11 @@
 # OG7: remaining submission steps
 
-Nothing has been pushed, published, or sent to the organisers by Codex.
-The steps below are for Anderson to perform after his final review and decision
-to publish. Deadline: **18 October 2026, 23:59 SGT**.
+Anderson authorised continuation with publication. Codex pushed the prepared
+branch to the confirmed public fork and opened an internal draft PR for Judge
+validation: <https://github.com/bob-the-doorknob/og7_track2/pull/1>.
+GitHub Actions is now enabled on the fork. Organiser notification is still for
+Anderson to send. The publishing commands below remain for reference and any
+later approved updates. Deadline: **18 October 2026, 23:59 SGT**.
 
 Official instructions:
 <https://ntudeepspeed.github.io/Recruitment_Hackathon_2627/track2/07-submission.html>

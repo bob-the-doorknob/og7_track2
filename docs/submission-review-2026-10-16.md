@@ -1,6 +1,7 @@
 # OG7 Track 2 submission review
 
-Status: prepared locally; publication and submission require Anderson's final approval.
+Status: publication authorised and branch pushed; Judge validation and organiser
+notification are pending. No merge or organiser notification has been performed.
 
 ## Destination
 
@@ -12,7 +13,10 @@ Status: prepared locally; publication and submission require Anderson's final ap
 - Prepared branch: `submission/og7-track2`
 - Live remote heads checked on 16 October 2026: `main`, `track2`, `track1`,
   and `gh-pages`.
-  The prepared submission branch is new and has not been pushed.
+  The prepared submission branch was subsequently pushed and the remote hash
+  matched local commit `1019c257632d8db065a6d74ca75c34581856498e`.
+  Internal validation PR: <https://github.com/bob-the-doorknob/og7_track2/pull/1>.
+  GitHub Actions was enabled on the new fork before triggering validation.
 - Frozen implementation commit: `8ac1d0f3335a6d90aca21679947ded24501b69ba`.
 
 ## Selected model and controls
@@ -101,12 +105,12 @@ No new training was started. Runtime code/configuration remains unchanged.
 ## Approval and remaining external steps
 
 Review `SUBMISSION.md`, this record, the final local commit, and the selected
-model before approving publication. No push, organiser message, or submission
-has been performed.
+model as the publication record. The branch has been pushed with approval;
+no organiser message or final submission notification has been sent.
 
-After Anderson explicitly approves:
+Remaining external checks:
 
-1. After final approval, push `submission/og7-track2` to the confirmed
+1. Verify the latest published `submission/og7-track2` commit in the confirmed
    public fork above.
 2. Dispatch the GitHub Judge workflow on that exact branch, or use an internal
    pull request targeting `track2`/`main`, and resolve failures. A push to the

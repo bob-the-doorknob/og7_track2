@@ -197,8 +197,10 @@ prepared to explain its behavior and the model-training process.
 
 ## Local preparation status
 
-This is a local draft. Nothing has been submitted or published from this
-preparation step. Publication requires the team leader's final approval.
+The team leader authorised continuation with publication. The prepared branch
+has been pushed to the confirmed public fork. GitHub Judge validation and
+notification to the organisers are separate remaining steps; no organiser
+notification has been sent by Codex.
 
 Prepared locally:
 
@@ -207,7 +209,8 @@ Prepared locally:
   (the configured `team` remote). GitHub metadata confirms it is a public fork
   of `NTUDeepSpeed/Recruitment_Hackathon_2627`, with the official `track2`
   branch present. Prepared submission branch: `submission/og7-track2`.
-  It remains local until the team leader approves publication.
+  It is published on that fork. Internal draft validation PR:
+  `https://github.com/bob-the-doorknob/og7_track2/pull/1`.
 - The selected implementation and runtime assets are frozen in local commit
   `8ac1d0f3335a6d90aca21679947ded24501b69ba`. Simulator binaries,
   build/install/log directories, and unrelated ZIP archives are excluded.
@@ -223,10 +226,10 @@ Prepared locally:
   11.0458 s best lap, 111.0577 s total, zero collisions. The original result
   is `results/submitted/OG7__20261016T062854Z.json`.
 - The final review record is `docs/submission-review-2026-10-16.md`.
-  The team leader's final review and approval are still pending.
+  Publication was authorised; the organisers' notification is pending.
 
-After final approval, push the approved branch, check the Judge workflow, and
-provide the organisers with its repository URL and branch before
+Check the Judge workflow, then provide the organisers with the repository URL
+and branch before
 18 October 2026, 23:59 SGT, as specified in `docs/07-submission.md`.
 Judge does not automatically run on a push to `submission/og7-track2`: its
 push filter covers `main` and `track2`. Follow `docs/SUBMISSION_HANDOVER.md`
