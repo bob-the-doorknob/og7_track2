@@ -7,34 +7,20 @@ to publish. Deadline: **18 October 2026, 23:59 SGT**.
 Official instructions:
 <https://ntudeepspeed.github.io/Recruitment_Hackathon_2627/track2/07-submission.html>
 
-## 1. Choose an accepted repository
+## 1. Confirmed destination (completed)
 
-Use the repository the organisers assigned OG7, if they supplied one.
-Otherwise fork <https://github.com/NTUDeepSpeed/Recruitment_Hackathon_2627>:
+Use <https://github.com/bob-the-doorknob/og7_track2>.
+GitHub metadata checked on 16 October 2026 confirms it is a public fork of
+`NTUDeepSpeed/Recruitment_Hackathon_2627`. Its remote branches include `track2`.
+The local `team` remote now points to this fork. No new fork is needed.
+Do not push directly to the upstream NTUDeepSpeed repository.
 
-1. Sign in to the GitHub account that will own the team submission.
-2. Open the official repository and choose **Fork**.
-3. Choose a name such as `OG7-Track2`.
-4. If offered **Copy the main branch only**, uncheck it so the fork includes
-   the official `track2` branch and its Judge workflow.
-5. Create the fork and copy its HTTPS repository URL.
+## 2. Public access (verified)
 
-The currently configured `team` remote points to
-`https://github.com/bob-the-doorknob/DeepSpeedRobot.git`. It exists and is
-private, but its status as a fork or organiser-assigned repository has not
-been confirmed. Use it only after confirming that it satisfies one of those
-two submission routes. Otherwise point `team` at the fork/assigned URL above.
-Do not push the submission directly to the official NTUDeepSpeed repository.
-
-## 2. Ensure the judges can read it
-
-For a private repository, ask the organisers which GitHub accounts or team
-need access. In repository **Settings**, find the collaborator/access settings,
-invite those identities, and confirm their access. Do not guess their account
-names. A private URL alone does not grant access.
-
-If using a public fork, confirm its submission branch is visible while signed
-out. Only make a repository public if the team agrees to publish its contents.
+The destination is public, so collaborator invitations are not needed to read
+it. After publishing the submission branch, open that branch while signed out
+to confirm the actual submission is visible. If you later make it private,
+arrange organiser access before submitting its URL.
 
 ## 3. Review the prepared local branch
 
@@ -59,11 +45,10 @@ tracked modifications or if the branch is different.
 
 ## 4. Publish only after your final decision
 
-Replace the placeholder below with the accepted repository's actual HTTPS URL.
 Run these commands yourself only when ready to publish:
 
 ```powershell
-$destination = 'https://github.com/YOUR_ACCOUNT/YOUR_ACCEPTED_REPOSITORY.git'
+$destination = 'https://github.com/bob-the-doorknob/og7_track2.git'
 git -c "safe.directory=$submissionRepo" -C $submissionRepo remote set-url team $destination
 git -c "safe.directory=$submissionRepo" -C $submissionRepo remote -v
 ```

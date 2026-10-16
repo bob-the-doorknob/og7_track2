@@ -203,11 +203,11 @@ preparation step. Publication requires the team leader's final approval.
 Prepared locally:
 
 - All five member names, matric numbers, and email addresses are complete.
-- Proposed destination: `https://github.com/bob-the-doorknob/DeepSpeedRobot`
-  (the configured `team` remote). Its status as an accepted fork or assigned
-  repository and the organisers' access still need confirmation. Prepared
-  submission branch: `submission/og7-track2`. It remains local until the team
-  leader approves publication.
+- Confirmed destination: `https://github.com/bob-the-doorknob/og7_track2`
+  (the configured `team` remote). GitHub metadata confirms it is a public fork
+  of `NTUDeepSpeed/Recruitment_Hackathon_2627`, with the official `track2`
+  branch present. Prepared submission branch: `submission/og7-track2`.
+  It remains local until the team leader approves publication.
 - The selected implementation and runtime assets are frozen in local commit
   `8ac1d0f3335a6d90aca21679947ded24501b69ba`. Simulator binaries,
   build/install/log directories, and unrelated ZIP archives are excluded.

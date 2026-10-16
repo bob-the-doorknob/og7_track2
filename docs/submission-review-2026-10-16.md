@@ -4,12 +4,14 @@ Status: prepared locally; publication and submission require Anderson's final ap
 
 ## Destination
 
-- Proposed repository: <https://github.com/bob-the-doorknob/DeepSpeedRobot>.
-  Fork/assignment status and organiser access are not confirmed. The repository
-  is private. Follow `SUBMISSION_HANDOVER.md` before using this destination.
+- Confirmed repository: <https://github.com/bob-the-doorknob/og7_track2>.
+  GitHub metadata checked on 16 October confirms it is a public fork of
+  `NTUDeepSpeed/Recruitment_Hackathon_2627`. Public visibility permits reading
+  without collaborator invitations.
 - Remote name: `team`
 - Prepared branch: `submission/og7-track2`
-- Live remote heads checked on 16 October 2026: `main` and `codex/fast-racing`.
+- Live remote heads checked on 16 October 2026: `main`, `track2`, `track1`,
+  and `gh-pages`.
   The prepared submission branch is new and has not been pushed.
 - Frozen implementation commit: `8ac1d0f3335a6d90aca21679947ded24501b69ba`.
 
@@ -104,8 +106,8 @@ has been performed.
 
 After Anderson explicitly approves:
 
-1. Confirm the accepted destination and organiser access, then push
-   `submission/og7-track2` to that destination.
+1. After final approval, push `submission/og7-track2` to the confirmed
+   public fork above.
 2. Dispatch the GitHub Judge workflow on that exact branch, or use an internal
    pull request targeting `track2`/`main`, and resolve failures. A push to the
    submission branch alone does not match the workflow's push filter.
