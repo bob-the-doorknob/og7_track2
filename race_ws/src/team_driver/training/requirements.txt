@@ -1,0 +1,7 @@
+# Training only. Install in a separate Python environment, never into the
+# official judging image. Keep ROS Humble's apt NumPy 1.21.5 and the AutoDRIVE
+# bridge's websocket dependencies intact.
+gymnasium==0.29.1
+cloudpickle==3.1.1
+farama-notifications==0.0.4
+typing-extensions==4.12.2

@@ -1,0 +1,79 @@
+{
+  "schema_version": 3,
+  "referee_version": "2.0.0",
+  "track_variant": "track2",
+  "simulator": "autodrive",
+  "team": "DeepSpeedRobot_fast_line_pilot",
+  "run_id": "20260929T173851Z",
+  "track": "icra26_compete",
+  "map_path": "/hackathon/maps/icra26_compete",
+  "finished_at_utc": "2026-09-29T17:41:06+00:00",
+  "simulator_best_lap_time": 19.8477,
+  "environment": {
+    "real_time_factor": 0.751,
+    "wall_duration_s": 135.69,
+    "callback_errors": 0
+  },
+  "status": "COMPLETE",
+  "reason": "all timed laps completed",
+  "scored": true,
+  "rules": {
+    "warmup_laps": 2,
+    "timed_laps": 3,
+    "collision_penalty_s": 10.0,
+    "max_collisions": 10,
+    "min_lap_time_s": 1.0,
+    "session_timeout_s": 900.0,
+    "stuck_speed_mps": 0.05,
+    "stuck_timeout_s": 15.0
+  },
+  "laps_completed": 3,
+  "laps_required": 3,
+  "collisions": 0,
+  "collision_limit": 10,
+  "best_lap_time": 19.8497,
+  "best_lap_time_raw": 19.8497,
+  "best_lap_number": 1,
+  "fastest_raw_lap_time": 19.8497,
+  "fastest_raw_lap_number": 1,
+  "total_time": 60.2227,
+  "total_time_raw": 60.2227,
+  "total_penalty_s": 0.0,
+  "race_time_s": 100.487,
+  "warnings": [],
+  "laps": [
+    {
+      "number": 1,
+      "raw_time": 19.8497,
+      "collisions": 0,
+      "penalty_s": 0.0,
+      "net_time": 19.8497
+    },
+    {
+      "number": 2,
+      "raw_time": 19.9926,
+      "collisions": 0,
+      "penalty_s": 0.0,
+      "net_time": 19.9926
+    },
+    {
+      "number": 3,
+      "raw_time": 20.3804,
+      "collisions": 0,
+      "penalty_s": 0.0,
+      "net_time": 20.3804
+    }
+  ],
+  "warmup_laps": [
+    {
+      "number": 1,
+      "raw_time": 19.8477,
+      "collisions": 0
+    },
+    {
+      "number": 2,
+      "raw_time": 20.1556,
+      "collisions": 0
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+# Selected sub-12 residual RL configuration; 7.2 m/s on map-certified straights.
+driver:
+  ros__parameters:
+    vehicle_ns: /autodrive/roboracer_1
+    max_range: 10.0
+    centerline_path: ""
+    vehicle_limits_path: packaged
+    planning_lateral_mps2: 24.0
+    planning_top_speed_mps: 7.2
+    map_guard_path: packaged
+    wheelbase: 0.324
+    lookahead_min: 0.55
+    lookahead_max: 1.5
+    lookahead_speed_gain: 0.25
+    speed_ff_gain: 0.16
+    speed_kp: 0.24
+    speed_ki: 0.08
+    steering_prediction_s: 0.0
+    steering_prediction_frames: 0.0
+    speed_prediction_enabled: false
+    adaptive_lookahead_enabled: false
+    baseline_only: false
+    policy_path: "packaged:residual_policy_v2_sub12_candidate.npz"
+    safety_enabled: true
+    safety_exit_preview_enabled: false
+    safety_side_margin: 0.08
+    safety_stop_margin: 0.25
+    safety_max_deceleration: 2.8
+    safety_horizon: 10.0

@@ -1,0 +1,29 @@
+# Tunable pure pursuit baseline for the ICRA 2026 compete racing line.
+driver:
+  ros__parameters:
+    vehicle_ns: /autodrive/roboracer_1
+    planning_lateral_mps2: 24.0    # pin the previous effective default for rollback
+    max_range: 10.0
+    centerline_path: ""           # empty uses packaged racing line; set centerline CSV to revert
+    target_speed: 4.4             # [m/s] straight-line target; profile slows for bends
+    max_lateral_accel: 1.5        # [m/s^2], reduces speed in tighter turns
+    max_braking_decel: 2.0        # [m/s^2], plans braking before each bend
+    wheelbase: 0.324              # [m]
+    lookahead_min: 0.55            # [m]
+    lookahead_max: 1.8             # [m]
+    lookahead_speed_gain: 0.35     # [s]
+    speed_ff_gain: 0.16
+    speed_kp: 0.24
+    speed_ki: 0.08
+    steering_prediction_s: 0.0
+    steering_prediction_frames: 0.0
+    speed_prediction_enabled: false
+    adaptive_lookahead_enabled: false
+    baseline_only: true           # baseline comparison; same 4.4 m/s settings
+    policy_path: ""               # ignored while baseline_only is true
+    safety_enabled: true
+    safety_exit_preview_enabled: false
+    safety_side_margin: 0.08      # [m] added to the 0.135 m car half-width
+    safety_stop_margin: 0.25      # [m] bumper and uncertainty allowance
+    safety_max_deceleration: 2.0  # [m/s^2] conservative braking limit
+    safety_horizon: 5.5           # [m] scanned path length, supports faster straights
