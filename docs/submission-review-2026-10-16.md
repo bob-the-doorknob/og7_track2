@@ -4,7 +4,9 @@ Status: prepared locally; publication and submission require Anderson's final ap
 
 ## Destination
 
-- Repository: <https://github.com/bob-the-doorknob/DeepSpeedRobot>
+- Proposed repository: <https://github.com/bob-the-doorknob/DeepSpeedRobot>.
+  Fork/assignment status and organiser access are not confirmed. The repository
+  is private. Follow `SUBMISSION_HANDOVER.md` before using this destination.
 - Remote name: `team`
 - Prepared branch: `submission/og7-track2`
 - Live remote heads checked on 16 October 2026: `main` and `codex/fast-racing`.
@@ -61,15 +63,38 @@ devkit overlays supplied the base dependencies.
   SHA-256: `ad21db1b4831c76172b60de325b16eae44fab5e568bb25a6b2a79f6f11247206`.
   The submitted copy is byte-identical to the referee output.
 
-The implementation commit above is the one tested. The following local commit
-adds only this review record, the unedited clean-clone result, and updated
-submission documentation; no driver or configuration changes follow that test.
+The implementation commit above is the one tested. Subsequent local commits
+add documentation and unedited result records; no runtime driver or
+configuration changes follow that test.
 
 The simulator check uses the native Windows simulator and the existing
 unmodified bridge. It launches the clean clone's official referee and bare
 driver with no driver parameter overrides, ten timed laps and two unscored laps.
 This checks a clean source/build and installed assets in the existing image;
 it does not claim a new Docker image or headless Linux simulator test.
+
+## Additional official-script check
+
+The unmodified evaluation script was run from the same clean clone with only
+the stock ROS/devkit dependencies sourced:
+
+```bash
+export RACE_WS=/tmp/og7-submission-20261016-v1/race_ws
+bash scripts/evaluate.sh --team OG7 --runs 1 --no-simulator \
+  --timeout 960 --wall-timeout 900 --output <local-results-directory>
+```
+
+It rebuilt both packages and returned exit code 0: **COMPLETE**, scored,
+ten of ten timed laps, **zero collisions**, **11.0458 s best lap** and
+**111.0577 s total**, real-time factor **0.514**, zero callback errors.
+The original result is `results/submitted/OG7__20261016T062854Z.json`;
+its SHA-256 is `d209a14f3740a73d5463b7d31fe5f760ae3e42c52ada2bede61ee936d8e1beec`.
+The copied result matches the referee output byte for byte.
+
+The racing-line reproduction command in `reproduce-selected-driver.md`
+exactly reproduced all 272 waypoint coordinates, and the training CLI's help
+command succeeded with the isolated training interpreter and ROS paths.
+No new training was started. Runtime code/configuration remains unchanged.
 
 ## Approval and remaining external steps
 
@@ -79,10 +104,14 @@ has been performed.
 
 After Anderson explicitly approves:
 
-1. Push `submission/og7-track2` to the configured `team` remote.
-2. Check the GitHub Judge workflow on that exact branch and resolve failures.
+1. Confirm the accepted destination and organiser access, then push
+   `submission/og7-track2` to that destination.
+2. Dispatch the GitHub Judge workflow on that exact branch, or use an internal
+   pull request targeting `track2`/`main`, and resolve failures. A push to the
+   submission branch alone does not match the workflow's push filter.
 3. Give the organisers the repository URL and branch before
    **18 October 2026, 23:59 SGT**.
 
 The organisers' evaluation determines the score. Local and GitHub results
 establish reproducibility and execution, not a guaranteed judging time.
+Detailed user steps are in `SUBMISSION_HANDOVER.md`.

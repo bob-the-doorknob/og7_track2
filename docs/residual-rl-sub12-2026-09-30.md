@@ -1,10 +1,18 @@
 # Residual RL on the clean sub-12 classical driver
 
+Historical training record (30 September 2026). The current submission uses
+the same packaged actor with the later 18 m/s^2 profile and guarded exit
+preview. Bare driver defaults now select it. See
+`reproduce-selected-driver.md` and `corner-exit-2026-10-16.md` for the current
+commands and controller selection; references below to a separate default
+configuration describe the state at the time of this experiment.
+
 The preserved classical reference is
 `race_ws/src/team_driver/config/fast_corner_24_map72_safety28_params.yaml`.
 Its two ten-lap scored runs had zero collisions and penalties, with best laps
 of 11.652 and 11.639 s and totals of 117.874 and 117.428 s. The original
-config and earlier `fast_corner_15_params.yaml` are unchanged.
+config and earlier `fast_corner_15_params.yaml` retain their historical control
+settings; explicit preview-disable settings were added during final packaging.
 
 The new race config is
 `race_ws/src/team_driver/config/fast_corner_24_residual_v2_sub12_params.yaml`.

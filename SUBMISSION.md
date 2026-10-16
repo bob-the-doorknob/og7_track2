@@ -97,6 +97,7 @@ and the single warm-up lap. Original referee JSONs are in `results/submitted/`.
 
 | Run | Best lap | 10-lap total | Collisions | Status |
 | --- | ---: | ---: | ---: | --- |
+| `20261016T062854Z` (official evaluate.sh, clean clone, bare defaults) | **11.0458 s** | **111.0577 s** | 0 | COMPLETE, scored |
 | `cleanclone_20261016_a` (clean source/build, bare defaults) | **11.0478 s** | **111.0947 s** | 0 | COMPLETE, scored |
 | `cornerexit_preview18_20261016_a` (selected controls, explicit parameters) | **11.0708 s** | **111.0617 s** | 0 | COMPLETE, scored |
 | `cornerexit_default_20261016_b` (selected bare defaults; trace-only override) | **11.0588 s** | **111.2049 s** | 0 | COMPLETE, scored |
@@ -124,6 +125,7 @@ historical performance evidence. They predate the current driver changes:
 
 The selected runs recorded real-time factors of 0.666 and 0.670.
 The additional clean-clone run recorded 0.543.
+The final official-script run recorded 0.514.
 The October comparison runs ranged from 0.458 to 0.698; the earlier pre-change
 run recorded 0.952. Simulator pacing varied during testing.
 
@@ -153,6 +155,16 @@ replay buffer and 4,000 additional steps (seed 50). The packaged `.npz` file is
 the inference artifact; the training checkpoint and replay buffer are not
 needed at runtime.
 
+The recorded resumed stage took 197.493 seconds and completed 13 exploratory
+episodes; earlier training time is not included. The reward encourages forward
+progress and completed laps, and penalises collisions, leaving the course,
+tracking error, unsafe speed, large/changing actions, and safety rejections.
+Exact weights, offline racing-line generation, and fresh/resumed training
+commands are documented in `docs/reproduce-selected-driver.md`.
+The historical trainer checkpoint is local and not committed, so the repository
+does not support byte-identical retraining of the selected weights. It includes
+the exported weights, metadata, and producer code needed for race inference.
+
 ## Dependencies we added
 
 None. The driver uses the ROS 2 packages and Python dependencies in the
@@ -173,7 +185,7 @@ prepared to explain its behavior and the model-training process.
 
 ## Known issues
 
-- The selected controls have three complete ten-lap runs on this machine,
+- The selected controls have four complete ten-lap runs on this machine,
   including a clean-source clone built in the existing container.
   Different simulator pacing or judging hardware may change the results.
 - Throttle switching is reduced in frequency at the exit, but individual
@@ -191,9 +203,11 @@ preparation step. Publication requires the team leader's final approval.
 Prepared locally:
 
 - All five member names, matric numbers, and email addresses are complete.
-- Destination: `https://github.com/bob-the-doorknob/DeepSpeedRobot` (the
-  configured `team` remote). Prepared submission branch: `submission/og7-track2`.
-  This branch remains local until the team leader approves publication.
+- Proposed destination: `https://github.com/bob-the-doorknob/DeepSpeedRobot`
+  (the configured `team` remote). Its status as an accepted fork or assigned
+  repository and the organisers' access still need confirmation. Prepared
+  submission branch: `submission/og7-track2`. It remains local until the team
+  leader approves publication.
 - The selected implementation and runtime assets are frozen in local commit
   `8ac1d0f3335a6d90aca21679947ded24501b69ba`. Simulator binaries,
   build/install/log directories, and unrelated ZIP archives are excluded.
@@ -204,9 +218,17 @@ Prepared locally:
 - The clean clone's bare driver completed ten timed laps with no parameter
   overrides: 11.0478 s best lap, 111.0947 s total, zero collisions. Its original
   result is `results/submitted/OG7__cleanclone_20261016_a.json`.
+- The unmodified `scripts/evaluate.sh` also completed a full clean-clone run
+  with `--team OG7 --runs 1 --no-simulator` and the clean race workspace:
+  11.0458 s best lap, 111.0577 s total, zero collisions. The original result
+  is `results/submitted/OG7__20261016T062854Z.json`.
 - The final review record is `docs/submission-review-2026-10-16.md`.
   The team leader's final review and approval are still pending.
 
 After final approval, push the approved branch, check the Judge workflow, and
 provide the organisers with its repository URL and branch before
 18 October 2026, 23:59 SGT, as specified in `docs/07-submission.md`.
+Judge does not automatically run on a push to `submission/og7-track2`: its
+push filter covers `main` and `track2`. Follow `docs/SUBMISSION_HANDOVER.md`
+to dispatch it manually for the submission branch or use an internal pull
+request targeting an eligible branch.

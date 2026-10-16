@@ -1,10 +1,23 @@
 # AutoDRIVE training environment
 
+## Current submission
+
+The selected actor is `weights/residual_policy_v2_sub12_candidate.npz`
+(observation version 2). The bare driver and `config/driver_params.yaml` use
+the 18 m/s^2 profile with guarded exit preview. See
+`../../../../docs/reproduce-selected-driver.md` for offline generation and
+training commands, reward details, and the limits of exact reproduction.
+See `../../../../docs/corner-exit-2026-10-16.md` for current scored comparisons.
+
+The sections below record earlier calibration and training experiments.
+Their 3.0/4.4 m/s actors and example training settings are historical;
+they do not describe the current driver defaults.
+
 ## Measure the vehicle before raising speed
 
 The 5,000-step fast-baseline residual RL v2 experiment and its scored
-diagnostics are recorded in `docs/rl-v2-training-2026-09-30.md`. The v2 actor
-has not replaced the selected v1 model.
+diagnostics are recorded in `docs/rl-v2-training-2026-09-30.md`. That experiment
+predates the selected sub-12 v2 actor described above.
 
 `training.vehicle_calibration` only subscribes to telemetry; run it beside
 one normal driver outside a scored evaluation. From the `team_driver` source
@@ -25,7 +38,7 @@ this is a conservative deceleration floor, not a measurement of maximum
 active braking. The `top_speed_mps` field is the highest speed **observed so
 far**, not the car's physical maximum. Recalibrate after faster clean runs.
 
-For the first calibration, use the selected 4.4 m/s driver. To measure above
+For the original calibration, we used the then-selected 4.4 m/s driver. To measure above
 that, stop it and start the classical driver with `-p baseline_only:=true`, a
 small increase in `-p target_speed`, and a LiDAR horizon that can support the
 trial. Do not use the 4.4 m/s actor outside its training range. The first
@@ -68,7 +81,7 @@ AutoDRIVE LiDAR, odometry, lap count, and collision count, and publishes the
 same steering/throttle topics as the race driver. It reuses the race driver's
 centreline controller, PI speed controller, LiDAR safety, observation packing,
 speed profile, and residual action limits. `action=[0, 0]` produces the
-baseline command. The current speed profile targets up to 4.4 m/s on straights and
+baseline command. The original default training profile targets up to 4.4 m/s on straights and
 plans braking before bends using curvature and a 2.0 m/s² deceleration limit.
 It follows the generated racing line rather than the original centreline.
 
@@ -155,8 +168,8 @@ The JSON stores the seed, declared simulator build, reward weights, elapsed
 time, speed profile settings, and step count. The `.zip` retains the full SAC trainer; `.npz` is the
 small NumPy actor used by the race driver. Run outputs are gitignored. The
 checked-in `weights/baseline_residual.npz` is the zero-residual fallback.
-The selected 4.4 m/s actor is `weights/residual_policy.npz`, loaded by the
-default driver configuration. `config/baseline_44_params.yaml` retains the
+The earlier selected 4.4 m/s actor is `weights/residual_policy.npz`; it is no
+longer the default driver policy. `config/baseline_44_params.yaml` retains the
 classical baseline for comparison.
 The earlier `task5_first_1000` checkpoint used a 1.8 m/s centreline baseline.
 The `task5_speed_profile_1500b` checkpoint used a 3.0 m/s centreline profile.
@@ -185,7 +198,7 @@ or scored runs. To try the candidate with the normal driver, use
 Check the terminal for `Loaded residual policy`; a missing or mistyped path
 causes the driver to fall back to the baseline.
 
-The selected run is `task5_racing_line_44_2500b` (seed 43, 2,500 steps) with
+The earlier selected run was `task5_racing_line_44_2500b` (seed 43, 2,500 steps) with
 the 4.4 m/s target and 5.5 m LiDAR horizon. Its exported actor and metadata
 are checked in as `weights/racing_line_44_2500_candidate.npz` and `.json`;
 the chosen copy is `weights/residual_policy.npz`. Training episodes included
@@ -195,7 +208,7 @@ collisions and were faster than the baseline runs.
 
 ## Faster classical driver
 
-The leading faster classical driver is `config/fast_corner_15_params.yaml`.
+The preserved classical comparison driver is `config/fast_corner_15_params.yaml`.
 After sourcing the worktree ROS overlay, run it with:
 
 ```bash
